@@ -8,6 +8,10 @@
     "host_permissions": [
       "https://moodle.miu.edu.eg/*"
     ],
+    "action": {
+  "default_popup": "popup.html",
+  "default_title": "Moodle AI Assistant"
+    },
     "content_scripts": [
       {
         "matches": ["https://moodle1.miuegypt.edu.eg/*"],

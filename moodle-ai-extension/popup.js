@@ -12,3 +12,9 @@ chrome.storage.local.get("moodleData", res => {
 syncBtn.addEventListener("click", () => {
   chrome.runtime.sendMessage({ type: "FORCE_SYNC" });
 });
+
+const exportBtn = document.getElementById("exportBtn");
+
+exportBtn.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "EXPORT_DATA" });
+});

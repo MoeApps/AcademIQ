@@ -1,0 +1,17 @@
+{
+    "student_id": "hashed_id",
+    "courses": [
+      {
+        "course_name": "Course Title",
+        "assignments": [
+          {
+            "name": "Assignment Name",
+            "due_date": "YYYY-MM-DD",
+            "grade": "15/20"
+          }
+        ]
+      }
+    ]
+  }
+  
+  
