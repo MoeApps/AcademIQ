@@ -1,0 +1,26 @@
+{
+  
+    "manifest_version": 3,
+    "name": "MIU Moodle AI Assistant",
+    "version": "0.1",
+    "description": "Client-side assistant for MIU Moodle data extraction",
+    "permissions": ["storage", "activeTab", "scripting"],
+    "host_permissions": [
+      "https://moodle.miu.edu.eg/*"
+    ],
+    "content_scripts": [
+      {
+        "matches": ["https://moodle1.miuegypt.edu.eg/*"],
+        "js": ["content.js"],
+        "run_at": "document_idle"   
+      }
+    ],
+    "background": {
+      "service_worker": "background.js"
+    }
+
+    
+  }
+
+  
+  
