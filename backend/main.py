@@ -11,7 +11,7 @@ app = FastAPI(title="academIQ Backend", version="1.0")
 # ------------------------------------
 # Load ML model and scaler
 # ------------------------------------
-model = joblib.load("logistic_model.pkl")
+model = joblib.load("pass_fail_model.pkl")
 scaler = joblib.load("scaler.pkl")
 
 # ------------------------------------
