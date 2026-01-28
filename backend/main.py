@@ -1,48 +1,68 @@
-import joblib
-
-# Load model & scaler once at startup
-model = joblib.load("ai/pass_fail_model.pkl")
-# scaler = joblib.load("scaler.pkl")
-
 from fastapi import FastAPI
 from pydantic import BaseModel
+import pandas as pd
+import joblib
 
-app = FastAPI()
+# ------------------------------------
+# Initialize FastAPI app
+# ------------------------------------
+app = FastAPI(title="academIQ Backend", version="1.0")
 
-# Test root endpoint
-@app.get("/")
-def read_root():
-    return {"message": "academIQ backend is live!"}
+# ------------------------------------
+# Load ML model and scaler
+# ------------------------------------
+model = joblib.load("logistic_model.pkl")
+scaler = joblib.load("scaler.pkl")
 
+# ------------------------------------
+# Input schema (JSON validation)
+# ------------------------------------
 class StudentFeatures(BaseModel):
     attendance: float
     assignments: float
     quizzes: float
 
-import pandas as pd
+# ------------------------------------
+# Root endpoint (health check)
+# ------------------------------------
+@app.get("/")
+def root():
+    return {"message": "academIQ backend is running"}
 
+# ------------------------------------
+# Prediction endpoint
+# ------------------------------------
 @app.post("/predict")
 def predict(student: StudentFeatures):
-    # Convert input to dataframe
-    data = pd.DataFrame([student.dict()])
+
+    # Convert input JSON → DataFrame
+    input_df = pd.DataFrame([student.dict()])
 
     # Scale features
-    data_scaled = scaler.transform(data)
+    input_scaled = scaler.transform(input_df)
 
-    # Get prediction and probability
-    pred = model.predict(data_scaled)[0]
-    risk = model.predict_proba(data_scaled)[0][1]  # probability of failing
+    # Model prediction
+    prediction = model.predict(input_scaled)[0]
+    risk_score = model.predict_proba(input_scaled)[0][1]
 
-    # Generate recommendation
-    if pred == 0:
-        status = "pass"
-        recommendation = "Keep up the good work! Focus on assignments and quizzes."
+    # Interpret prediction
+    if prediction == 1:
+        pass_fail = "fail"
+        recommendation = (
+            "High academic risk detected. "
+            "Focus on attendance, submit all assignments, "
+            "and revise weak topics before quizzes."
+        )
     else:
-        status = "fail"
-        recommendation = "We recommend reviewing weak topics, completing missing assignments, and practicing quizzes."
+        pass_fail = "pass"
+        recommendation = (
+            "Low academic risk. "
+            "Maintain consistency and continue practicing quizzes."
+        )
 
+    # Response
     return {
-        "risk": round(risk, 2),
-        "pass_fail": status,
+        "risk_probability": round(float(risk_score), 2),
+        "pass_fail": pass_fail,
         "recommendation": recommendation
     }
