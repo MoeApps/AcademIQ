@@ -4,7 +4,7 @@ from dash import dcc, html, Input, Output
 import plotly.express as px
 
 # Load data
-df = pd.read_csv("/Users/mohamedalaa/Desktop/MIU/AcademIQ/ai/Dashboard/dashboard_data.csv")
+df = pd.read_csv("/Users/mohamedalaa/Desktop/MIU/AcademIQ/ai/Dashboard/dashboard_data_fixed.csv")
 
 
 # Initialize Dash app
