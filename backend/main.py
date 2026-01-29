@@ -12,15 +12,22 @@ app = FastAPI(title="academIQ Backend", version="1.0")
 # Load ML model and scaler
 # ------------------------------------
 model = joblib.load("pass_fail_model.pkl")
-scaler = joblib.load("scaler.pkl")
+scaler = joblib.load("pass_fail_scaler.pkl")
 
 # ------------------------------------
 # Input schema (JSON validation)
 # ------------------------------------
 class StudentFeatures(BaseModel):
-    attendance: float
-    assignments: float
-    quizzes: float
+    total_time_spent: float
+    active_days: float
+    access_frequency: float
+    avg_quiz_score: float
+    quiz_score_std: float
+    avg_assignment_score: float
+    late_submission_ratio: float
+    risk_cluster: float
+    risk_cluster_encoded: float
+    avg_final_grade: float
 
 # ------------------------------------
 # Root endpoint (health check)
