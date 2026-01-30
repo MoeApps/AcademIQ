@@ -1,269 +1,239 @@
+// ---------- Global State ----------
 window.__MOODLE_AI_STATE__ = {
-  dashboard: {},
-  courses: [],
-  assignments: [],
-  grades: []
+  student_id: null,
+  clicks: 0,
+  sessions: [],
+  courses: {},
+  lastActivity: Date.now()
 };
 
+const STORAGE_KEY_MOODLE_AI = "MIU_MOODLE_DATA_V1";
 
-const STORAGE_KEY = "MIU_MOODLE_DATA_V1";
-function loadStoredData(callback) {
-    chrome.storage.local.get([STORAGE_KEY], result => {
-      callback(result[STORAGE_KEY] || null);
-    });
-  }
-  
-  function persistData(state) {
-    chrome.storage.local.set({
-      moodleData: {
-        lastUpdated: new Date().toISOString(),
-        payload: state
-      }
-    });
-  }
-  
-  
-  function getEmptyDataStructure() {
-    return {
-      version: "1.0",
-      last_updated: new Date().toISOString(),
-      student: {
-        courses: []
-      }
-    };
-  }
-  function upsertCourse(data, courseName, courseUrl = null) {
-    let course = data.student.courses.find(c => c.name === courseName);
-  
-    if (!course) {
-      course = {
-        name: courseName,
-        url: courseUrl,
+// ---------- Helper Functions ----------
+function persistData() {
+  chrome.storage.local.set({
+    [STORAGE_KEY_MOODLE_AI]: {
+      lastUpdated: new Date().toISOString(),
+      payload: window.__MOODLE_AI_STATE__
+    }
+  });
+}
+
+function hashStudentId() {
+  const username = document.querySelector("span.usertext")?.innerText?.trim() || "anonymous";
+  return btoa(username);
+}
+
+// ---------- Session Tracking ----------
+let sessionStart = Date.now();
+
+function updateActivity() {
+  window.__MOODLE_AI_STATE__.lastActivity = Date.now();
+}
+
+document.addEventListener("mousemove", updateActivity);
+document.addEventListener("keydown", updateActivity);
+document.addEventListener("click", () => {
+  window.__MOODLE_AI_STATE__.clicks++;
+  updateActivity();
+});
+
+function recordSession() {
+  const now = Date.now();
+  const idleTime = now - window.__MOODLE_AI_STATE__.lastActivity;
+  const sessionDuration = now - sessionStart;
+
+  window.__MOODLE_AI_STATE__.sessions.push({
+    start_time: new Date(sessionStart).toISOString(),
+    end_time: new Date(now).toISOString(),
+    active_time: sessionDuration - idleTime,
+    idle_time: idleTime,
+    clicks: window.__MOODLE_AI_STATE__.clicks
+  });
+
+  sessionStart = now;
+  window.__MOODLE_AI_STATE__.clicks = 0;
+  window.__MOODLE_AI_STATE__.lastActivity = now;
+}
+
+// Record session every 1 minute
+setInterval(recordSession, 60 * 1000);
+window.addEventListener("beforeunload", recordSession);
+
+// ---------- Scraping Functions ----------
+function scrapeCourses() {
+  const courseLinks = [...document.querySelectorAll('a[href*="/course/view.php?id="]')];
+  courseLinks.forEach(a => {
+    const url = a.href.split('#')[0];
+    if (!window.__MOODLE_AI_STATE__.courses[url]) {
+      window.__MOODLE_AI_STATE__.courses[url] = {
+        name: a.innerText.trim(),
         assignments: [],
-        grades: []
+        quizzes: [],
+        finalGrade: null
       };
-      data.student.courses.push(course);
-    }
-  
-    return course;
-  }
-      
-const MoodleState = {
-    currentPage: null,
-    courseName: null,
-    courses: [],
-    assignments: [],
-    grades: []
-  };
-
-
-  function detectPageType() {
-    const url = window.location.href;
-  
-    if (url.includes("/my/")) return "DASHBOARD";
-    if (url.includes("/course/view.php")) return "COURSE";
-    if (url.includes("/mod/assign/")) return "ASSIGNMENTS";
-    if (url.includes("/grade/report/user")) return "GRADES";
-  
-    return "UNKNOWN";
-  }
-
-  
-MoodleState.currentPage = detectPageType();
-console.log("Detected Moodle page:", MoodleState.currentPage);
-
-function waitForElement(selector, callback) {
-  const el = document.querySelector(selector);
-  if (el) return callback();
-
-  const observer = new MutationObserver(() => {
-    const el = document.querySelector(selector);
-    if (el) {
-      observer.disconnect();
-      callback();
     }
   });
-
-  observer.observe(document.body, { childList: true, subtree: true });
 }
 
+function scrapeAssignments() {
+  document.querySelectorAll('table.assignments tbody tr').forEach(row => {
+    const title = row.querySelector('td.title a')?.innerText.trim();
+    const gradeText = row.querySelector('td.grade')?.innerText.trim();
+    const dueText = row.querySelector('td.due')?.innerText.trim();
+    const submittedText = row.querySelector('td.status')?.innerText.trim();
 
-function runScraper() {
-  const page = detectPageType();
-  console.log("Detected Moodle page:", page);
-
-  switch (page) {
-    case "DASHBOARD":
-      waitForElement('a[href*="course/view.php"]', scrapeDashboard);
-      break;
-
-    case "COURSE":
-      waitForElement("h1", scrapeCoursePage);
-      break;
-
-    case "ASSIGNMENTS":
-      waitForElement('a[href*="/mod/assign/view.php"]', scrapeAssignmentsPage);
-      break;
-
-    case "GRADES":
-      waitForElement("table.user-grade", scrapeGradesPage);
-      break;
-  }
-
-  setTimeout(() => {
-    console.log("SAVING STATE:", window.__MOODLE_AI_STATE__);
-    persistData(window.__MOODLE_AI_STATE__);
-  }, 600);
-}
-
-runScraper();
-
-    
-  
-function scrapeDashboard() {
-  const courses = [...document.querySelectorAll('a[href*="course/view.php"]')]
-    .map(a => ({
-      title: a.innerText.trim(),
-      url: a.href
-    }))
-    .filter(c => c.title);
-
-  window.__MOODLE_AI_STATE__.courses = courses;
-}
-
-
-
-function scrapeCoursePage() {
-  const name = document.querySelector("h1")?.innerText.trim();
-  if (!name) return;
-
-  window.__MOODLE_AI_STATE__.currentCourse = name;
-}
-
-  
-   
-function scrapeAssignmentsPage() {
-  const assignments = [];
-
-  document.querySelectorAll('a[href*="/mod/assign/view.php"]').forEach(link => {
-    const container = link.closest(".activity.assign");
-    const text = container?.innerText || "";
-    const due = text.match(/Due[:\s].*/i)?.[0] || null;
-
-    assignments.push({
-      title: link.innerText.trim(),
-      url: link.href,
-      dueDate: due
-    });
-  });
-
-  window.__MOODLE_AI_STATE__.assignments = assignments;
-}
-
-  
-
-function scrapeGradesPage() {
-  const grades = [];
-
-  document.querySelectorAll("table.user-grade tbody tr").forEach(row => {
-    const item = row.querySelector("th.column-itemname")?.innerText.trim();
-    const grade = row.querySelector("td.column-grade")?.innerText.trim();
-    const max = row.querySelector("td.column-range")?.innerText.trim();
-
-    if (item && grade) {
-      grades.push({ item, grade, max });
+    const grade = gradeText ? parseFloat(gradeText) : null;
+    const submitted = submittedText?.toLowerCase().includes("submitted");
+    let submission_delay = 0;
+    if(dueText) {
+      const dueDate = new Date(dueText);
+      const today = new Date();
+      submission_delay = submitted && dueDate ? Math.max(0, Math.floor((today - dueDate)/(1000*60*60*24))) : 0;
     }
-  });
 
-  window.__MOODLE_AI_STATE__.grades = grades;
-}
-
-  
-
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type === "FORCE_SYNC") {
-      runScrapers();
-    }
-  });
-
-  chrome.runtime.onMessage.addListener(msg => {
-    if (msg.type === "EXPORT_DATA") {
-      chrome.storage.local.get("moodleData", res => {
-        if (!res.moodleData?.payload) return;
-  
-        const exportData = transformToExportSchema(res.moodleData.payload);
-        downloadJSON(exportData);
+    const courseUrl = window.location.href.split('?id=')[0];
+    if(courseUrl && window.__MOODLE_AI_STATE__.courses[courseUrl]) {
+      window.__MOODLE_AI_STATE__.courses[courseUrl].assignments.push({
+        title,
+        due_date: dueText || null,
+        grade,
+        submitted,
+        submission_delay
       });
     }
   });
-  
-  
+}
 
-  function transformToExportSchema(rawState) {
-    const coursesMap = {};
-  
-    // From dashboard / courses
-    rawState.courses?.forEach(course => {
-      coursesMap[course.url] = {
-        courseId: course.url.split("id=")[1] || "",
-        name: course.title || "",
-        assignments: [],
-        grades: []
-      };
-    });
-  
-    // Attach assignments
-    rawState.assignments?.forEach(a => {
-      const courseKey = a.courseUrl;
-      if (coursesMap[courseKey]) {
-        coursesMap[courseKey].assignments.push({
-          title: a.title,
-          dueDate: a.dueDate || null,
-          status: a.status || null
-        });
-      }
-    });
-  
-    // Attach grades
-    rawState.grades?.forEach(g => {
-      const courseKey = g.courseUrl;
-      if (coursesMap[courseKey]) {
-        coursesMap[courseKey].grades.push({
-          item: g.item,
-          grade: g.grade,
-          max: g.max
-        });
-      }
-    });
-  
-    return {
-      schemaVersion: "1.0",
-      source: "MIU Moodle",
-      collectedAt: new Date().toISOString(),
-      student: {
-        id: "anonymous"
-      },
-      courses: Object.values(coursesMap)
-    };
-  }
-  
-  function downloadJSON(data) {
-    const blob = new Blob(
-      [JSON.stringify(data, null, 2)],
-      { type: "application/json" }
-    );
-  
-    const url = URL.createObjectURL(blob);
-  
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "moodle_student_data.json";
-    a.click();
-  
-    URL.revokeObjectURL(url);
-  }
-  
+function scrapeQuizzes() {
+  document.querySelectorAll('table.quizzes tbody tr').forEach(row => {
+    const title = row.querySelector('td.quizname a')?.innerText.trim();
+    const scoreText = row.querySelector('td.score')?.innerText.trim();
+    const attemptsText = row.querySelector('td.attempts')?.innerText.trim();
+    const timeText = row.querySelector('td.time_spent')?.innerText.trim();
 
-  console.log("SAVING STATE:", window.__MOODLE_AI_STATE__);
-  persistData(window.__MOODLE_AI_STATE__);
-  
+    const score = scoreText ? parseFloat(scoreText) : null;
+    const attempts = attemptsText ? parseInt(attemptsText) : 0;
+    const time_spent = timeText ? parseInt(timeText) : 0;
+
+    const courseUrl = window.location.href.split('?id=')[0];
+    if(courseUrl && window.__MOODLE_AI_STATE__.courses[courseUrl]) {
+      window.__MOODLE_AI_STATE__.courses[courseUrl].quizzes.push({
+        title,
+        score,
+        attempts,
+        time_spent
+      });
+    }
+  });
+}
+
+function scrapeFinalGrades() {
+  const courseUrl = window.location.href.split('?id=')[0];
+  const gradeText = document.querySelector("td.final-grade")?.innerText?.trim();
+  const grade = gradeText ? parseFloat(gradeText) : null;
+  if(courseUrl && window.__MOODLE_AI_STATE__.courses[courseUrl]) {
+    window.__MOODLE_AI_STATE__.courses[courseUrl].finalGrade = grade;
+  }
+}
+
+// ---------- Transform to AI Features ----------
+function computeAIFeatures() {
+  const state = window.__MOODLE_AI_STATE__;
+  state.student_id = hashStudentId();
+
+  let totalTime = 0;
+  let activeDaysSet = new Set();
+  let allQuizScores = [];
+  let allAssignmentScores = [];
+  let lateSubmissions = 0;
+  let totalAssignments = 0;
+  let totalFinalGrades = 0;
+  let coursesWithGrades = 0;
+
+  state.sessions.forEach(s => {
+    totalTime += s.active_time;
+    activeDaysSet.add(new Date(s.start_time).toDateString());
+  });
+
+  Object.values(state.courses).forEach(course => {
+    course.assignments.forEach(a => {
+      if(a.grade != null) allAssignmentScores.push(a.grade);
+      if(a.submission_delay > 0) lateSubmissions++;
+      totalAssignments++;
+    });
+    course.quizzes.forEach(q => {
+      if(q.score != null) allQuizScores.push(q.score);
+    });
+    if(course.finalGrade != null) {
+      totalFinalGrades += course.finalGrade;
+      coursesWithGrades++;
+    }
+  });
+
+  const avgQuizScore = allQuizScores.length ? allQuizScores.reduce((a,b)=>a+b,0)/allQuizScores.length : 0;
+  const quizScoreStd = allQuizScores.length ? Math.sqrt(allQuizScores.map(x=>Math.pow(x-avgQuizScore,2)).reduce((a,b)=>a+b,0)/allQuizScores.length) : 0;
+  const avgAssignmentScore = allAssignmentScores.length ? allAssignmentScores.reduce((a,b)=>a+b,0)/allAssignmentScores.length : 0;
+  const lateSubmissionRatio = totalAssignments ? lateSubmissions/totalAssignments : 0;
+  const avgFinalGrade = coursesWithGrades ? totalFinalGrades / coursesWithGrades : 0;
+
+  return {
+    student_id: state.student_id,
+    total_time_spent: totalTime,
+    active_days: activeDaysSet.size,
+    access_frequency: state.sessions.length,
+    avg_quiz_score: avgQuizScore,
+    quiz_score_std: quizScoreStd,
+    avg_assignment_score: avgAssignmentScore,
+    late_submission_ratio: lateSubmissionRatio,
+    avg_final_grade: avgFinalGrade
+  };
+}
+
+// ---------- Send to FastAPI ----------
+async function sendToBackend() {
+  const payload = computeAIFeatures();
+  try {
+    await fetch("http://localhost:8000/predict", {
+      method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    });
+    console.log("Data sent to backend:", payload);
+  } catch(err) {
+    console.error("Error sending data:", err);
+  }
+}
+
+// ---------- Run Scraper ----------
+function runScraper() {
+  scrapeCourses();
+  scrapeAssignments();
+  scrapeQuizzes();
+  scrapeFinalGrades();
+  persistData();
+  console.log("Scraped state:", window.__MOODLE_AI_STATE__);
+  console.log("AI-ready features:", computeAIFeatures());
+  // Optional: sendToBackend();
+}
+
+// ---------- Initial Run ----------
+window.addEventListener("load", () => runScraper());
+
+// ---------- Popup Messaging ----------
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if(msg.type === "FORCE_SYNC") runScraper();
+  if(msg.type === "EXPORT_DATA") {
+    chrome.storage.local.get(STORAGE_KEY_MOODLE_AI, res => {
+      const data = res[STORAGE_KEY_MOODLE_AI]?.payload;
+      if(!data) return;
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "moodle_student_data.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+});

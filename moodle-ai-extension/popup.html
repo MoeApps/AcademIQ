@@ -1,32 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Moodle AI</title>
+  <meta charset="UTF-8">
+  <title>MIU Moodle AI Assistant</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 12px;
       width: 300px;
-      padding: 10px;
+      background-color: #f7f9fc;
+      color: #333;
     }
+    h2 {
+      font-size: 18px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .risk {
+      font-weight: bold;
+      margin: 10px 0;
+      padding: 8px;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .risk.low { background-color: #d4edda; color: #155724; }
+    .risk.medium { background-color: #fff3cd; color: #856404; }
+    .risk.high { background-color: #f8d7da; color: #721c24; }
     button {
       width: 100%;
-      padding: 8px;
-      margin-top: 10px;
+      padding: 10px;
+      margin: 5px 0;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s ease;
     }
-    pre {
-      max-height: 200px;
-      overflow: auto;
-      background: #f5f5f5;
-      padding: 5px;
-      font-size: 11px;
-    }
+    button.sync { background-color: #007bff; color: #fff; }
+    button.sync:hover { background-color: #0056b3; }
+    button.export { background-color: #28a745; color: #fff; }
+    button.export:hover { background-color: #1e7e34; }
+    .status { font-size: 13px; color: #666; margin-top: 8px; text-align: center; }
   </style>
 </head>
 <body>
-  <h3>Moodle AI Assistant</h3>
-  <button id="syncBtn">🔄 Sync Now</button>
-  <button id="exportBtn">⬇️ Export JSON</button>
-  <pre id="output">No data yet</pre>
+  <h2>MIU Moodle AI Assistant</h2>
+  
+  <div id="riskDisplay" class="risk">No data yet</div>
+
+  <button id="syncBtn" class="sync">Sync Data</button>
+  <button id="exportBtn" class="export">Export JSON</button>
+
+  <div id="status" class="status"></div>
 
   <script src="popup.js"></script>
 </body>
