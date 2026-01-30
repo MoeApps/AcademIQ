@@ -5,21 +5,20 @@
     color: #ffffff;
     padding: 40px;
     font-family: "Segoe UI", sans-serif;
+    position: relative;
+    overflow: hidden;
+    z-index: 0;
   }
   
   /* ===== Header ===== */
   .dashboard-header {
     margin-bottom: 40px;
+    position: relative;
+    z-index: 1;
   }
   
-  .dashboard-header h1 {
-    font-size: 2.5rem;
-    margin-bottom: 8px;
-  }
-  
-  .dashboard-header p {
-    opacity: 0.8;
-  }
+  .dashboard-header h1 { font-size: 2.5rem; margin-bottom: 8px; }
+  .dashboard-header p { opacity: 0.8; }
   
   /* ===== Grid ===== */
   .dashboard-grid {
@@ -27,44 +26,68 @@
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 24px;
     margin-bottom: 40px;
+    position: relative;
+    z-index: 1;
   }
   
-  /* ===== Card ===== */
+  /* ===== Cards ===== */
   .dashboard-card {
     background: rgba(255, 255, 255, 0.08);
     border-radius: 16px;
     padding: 24px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
     cursor: pointer;
-    transition: all 0.25s ease;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
   }
   
-  .dashboard-card h3 {
-    font-size: 1.1rem;
-    margin-bottom: 12px;
-    opacity: 0.85;
+  .card-header { display: flex; align-items: center; gap: 12px; }
+  .card-icon { opacity: 0.8; }
+  .card-value { display: flex; align-items: center; gap: 8px; }
+  .trend-icon { margin-left: 4px; }
+  
+  .dashboard-card:hover { transform: translateY(-6px) scale(1.03); }
+  
+  /* Gradient bar animation */
+  .gradient-bar {
+    height: 4px;
+    width: 100%;
+    margin-top: 12px;
+    background: linear-gradient(90deg, #3498db, #2ecc71, #f39c12, #e74c3c);
+    background-size: 400% 400%;
+    border-radius: 4px;
+    animation: gradientAnimation 4s ease infinite;
   }
   
-  .dashboard-card p {
-    font-size: 1.8rem;
-    font-weight: bold;
+  @keyframes gradientAnimation {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
   }
   
-  .dashboard-card:hover {
-    transform: translateY(-6px) scale(1.03);
+  /* Sparkline chart inside card */
+  .sparkline {
+    margin-top: 12px;
+    height: 50px;
   }
   
-  /* ===== Accent Colors ===== */
+  /* Accent Colors */
   .accent-green { border-left: 6px solid #2ecc71; }
   .accent-orange { border-left: 6px solid #f39c12; }
   .accent-blue { border-left: 6px solid #3498db; }
   .accent-red { border-left: 6px solid #e74c3c; }
   
-  /* ===== Charts Section ===== */
+  /* Charts Section */
   .dashboard-charts {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 30px;
+    position: relative;
+    z-index: 1;
   }
   
   .chart-card {
@@ -74,13 +97,9 @@
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
   }
   
-  /* Chart headings */
-  .chart-card h3 {
-    margin-bottom: 16px;
-    font-size: 1.2rem;
-  }
+  .chart-card h3 { margin-bottom: 16px; font-size: 1.2rem; }
   
-  /* ===== Mobile ===== */
+  /* Mobile */
   @media (max-width: 600px) {
     .dashboard-header h1 { font-size: 2rem; }
     .dashboard-card p { font-size: 1.4rem; }
