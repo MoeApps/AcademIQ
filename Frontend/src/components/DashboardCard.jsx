@@ -1,5 +1,6 @@
 export default function DashboardCard({ title, value, color }) {
     return (
+        
       <div className="bg-white rounded-xl shadow-md p-6">
         <h2 className="text-gray-500 text-sm mb-1">
           {title}
@@ -8,6 +9,8 @@ export default function DashboardCard({ title, value, color }) {
           {value}
         </p>
       </div>
+      
     );
   }
+  
   

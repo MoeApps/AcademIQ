@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   PieChart,
   Pie,
@@ -9,10 +11,27 @@ import {
 import DashboardCard from "../components/DashboardCard";
 
 export default function Dashboard() {
-  const passFailData = [
-    { name: "Pass", value: 80 },
-    { name: "Fail", value: 40 },
-  ];
+  const [filter, setFilter] = useState("all");
+
+  
+  const rawData = {
+    pass: 80,
+    fail: 40,
+  };
+  
+  let passFailData = [];
+  
+  if (filter === "all") {
+    passFailData = [
+      { name: "Pass", value: rawData.pass },
+      { name: "Fail", value: rawData.fail },
+    ];
+  } else if (filter === "pass") {
+    passFailData = [{ name: "Pass", value: rawData.pass }];
+  } else {
+    passFailData = [{ name: "Fail", value: rawData.fail }];
+  }
+  
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -38,6 +57,18 @@ export default function Dashboard() {
           color="text-red-600"
         />
       </div>
+
+      
+      <select
+  value={filter}
+  onChange={(e) => setFilter(e.target.value)}
+  className="mb-4 p-2 border rounded-md"
+>
+  <option value="all">All Students</option>
+  <option value="pass">Passing Only</option>
+  <option value="fail">Failing Only</option>
+</select>
+
 
       {/* Chart Section */}
       <div className="bg-white rounded-xl shadow-md p-6 h-96">
