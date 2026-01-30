@@ -1,7 +1,8 @@
-import "../styles/dashboard.css";
+import "../styles/dashboard.css"; 
 import DashboardCard from "../components/DashboardCard";
-import LineChart from "../components/LineChart";
+import LineChart from "../components/LineChart"; 
 import Particles from "react-tsparticles";
+import TopStats from "../components/TopStats";
 
 export default function Dashboard() {
   const predictionData = {
