@@ -34,7 +34,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["chrome-extension://pelgaliljjfhhboggbncepdblmjobgan", "http://localhost:8000"],  # or ["*"] for testing
+    allow_origins=["chrome-extension://pelgaliljjfhhboggbncepdblmjobgan", "http://localhost:3000", "http://localhost:8000"],  # or ["*"] for testing
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
