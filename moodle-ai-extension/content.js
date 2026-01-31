@@ -1,239 +1,169 @@
-// ---------- Global State ----------
-window.__MOODLE_AI_STATE__ = {
-  student_id: null,
-  clicks: 0,
-  sessions: [],
-  courses: {},
-  lastActivity: Date.now()
-};
+// =======================================
+// AcademIQ – content.js (FINAL VERSION)
+// Raw Moodle Data Collector
+// =======================================
 
-const STORAGE_KEY_MOODLE_AI = "MIU_MOODLE_DATA_V1";
+(() => {
+  // ---------- CONSTANTS ----------
+  const STORAGE_KEY = "ACADEMIQ_RAW_EVENTS_V1";
 
-// ---------- Helper Functions ----------
-function persistData() {
-  chrome.storage.local.set({
-    [STORAGE_KEY_MOODLE_AI]: {
-      lastUpdated: new Date().toISOString(),
-      payload: window.__MOODLE_AI_STATE__
-    }
-  });
-}
+  // ---------- STATE ----------
+  const state = {
+    student_id: null,
+    sessions: [],
+    clicks: 0,
+    courses: {},
+    lastActivity: Date.now()
+  };
 
-function hashStudentId() {
-  const username = document.querySelector("span.usertext")?.innerText?.trim() || "anonymous";
-  return btoa(username);
-}
+  let currentSession = null;
+  let sessionStart = Date.now();
 
-// ---------- Session Tracking ----------
-let sessionStart = Date.now();
+  // ---------- HELPERS ----------
+  function now() {
+    return Date.now();
+  }
 
-function updateActivity() {
-  window.__MOODLE_AI_STATE__.lastActivity = Date.now();
-}
+  function getCourseIdFromUrl(url) {
+    const match = url.match(/course\/view\.php\?id=(\d+)/);
+    return match ? match[1] : null;
+  }
 
-document.addEventListener("mousemove", updateActivity);
-document.addEventListener("keydown", updateActivity);
-document.addEventListener("click", () => {
-  window.__MOODLE_AI_STATE__.clicks++;
-  updateActivity();
-});
+  function getCurrentCourse() {
+    const id = getCourseIdFromUrl(location.href);
+    if (!id) return null;
 
-function recordSession() {
-  const now = Date.now();
-  const idleTime = now - window.__MOODLE_AI_STATE__.lastActivity;
-  const sessionDuration = now - sessionStart;
-
-  window.__MOODLE_AI_STATE__.sessions.push({
-    start_time: new Date(sessionStart).toISOString(),
-    end_time: new Date(now).toISOString(),
-    active_time: sessionDuration - idleTime,
-    idle_time: idleTime,
-    clicks: window.__MOODLE_AI_STATE__.clicks
-  });
-
-  sessionStart = now;
-  window.__MOODLE_AI_STATE__.clicks = 0;
-  window.__MOODLE_AI_STATE__.lastActivity = now;
-}
-
-// Record session every 1 minute
-setInterval(recordSession, 60 * 1000);
-window.addEventListener("beforeunload", recordSession);
-
-// ---------- Scraping Functions ----------
-function scrapeCourses() {
-  const courseLinks = [...document.querySelectorAll('a[href*="/course/view.php?id="]')];
-  courseLinks.forEach(a => {
-    const url = a.href.split('#')[0];
-    if (!window.__MOODLE_AI_STATE__.courses[url]) {
-      window.__MOODLE_AI_STATE__.courses[url] = {
-        name: a.innerText.trim(),
+    if (!state.courses[id]) {
+      state.courses[id] = {
+        course_id: id,
+        name: document.querySelector("h1")?.innerText || "Unknown Course",
+        visits: 0,
+        time_spent_ms: 0,
         assignments: [],
         quizzes: [],
-        finalGrade: null
+        final_grade: null
       };
     }
-  });
-}
+    return state.courses[id];
+  }
 
-function scrapeAssignments() {
-  document.querySelectorAll('table.assignments tbody tr').forEach(row => {
-    const title = row.querySelector('td.title a')?.innerText.trim();
-    const gradeText = row.querySelector('td.grade')?.innerText.trim();
-    const dueText = row.querySelector('td.due')?.innerText.trim();
-    const submittedText = row.querySelector('td.status')?.innerText.trim();
+  // ---------- SESSION TRACKING ----------
+  function startSession() {
+    currentSession = {
+      start: now(),
+      end: null,
+      duration_ms: 0
+    };
+    sessionStart = now();
+  }
 
-    const grade = gradeText ? parseFloat(gradeText) : null;
-    const submitted = submittedText?.toLowerCase().includes("submitted");
-    let submission_delay = 0;
-    if(dueText) {
-      const dueDate = new Date(dueText);
-      const today = new Date();
-      submission_delay = submitted && dueDate ? Math.max(0, Math.floor((today - dueDate)/(1000*60*60*24))) : 0;
+  function endSession() {
+    if (!currentSession) return;
+    currentSession.end = now();
+    currentSession.duration_ms = currentSession.end - currentSession.start;
+    state.sessions.push(currentSession);
+    currentSession = null;
+  }
+
+  startSession();
+
+  // ---------- ACTIVITY TRACKING ----------
+  function markActivity() {
+    const t = now();
+    if (currentSession) {
+      currentSession.duration_ms += t - state.lastActivity;
     }
+    state.lastActivity = t;
 
-    const courseUrl = window.location.href.split('?id=')[0];
-    if(courseUrl && window.__MOODLE_AI_STATE__.courses[courseUrl]) {
-      window.__MOODLE_AI_STATE__.courses[courseUrl].assignments.push({
+    const course = getCurrentCourse();
+    if (course) {
+      course.time_spent_ms += t - state.lastActivity;
+    }
+  }
+
+  ["mousemove", "keydown", "scroll", "click"].forEach(evt => {
+    document.addEventListener(evt, () => {
+      if (evt === "click") state.clicks++;
+      markActivity();
+    }, true);
+  });
+
+  // ---------- VISIBILITY / IDLE ----------
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      endSession();
+    } else {
+      startSession();
+    }
+  });
+
+  window.addEventListener("beforeunload", () => {
+    endSession();
+    persist();
+  });
+
+  // ---------- PAGE VISITS ----------
+  const course = getCurrentCourse();
+  if (course) course.visits++;
+
+  // ---------- SCRAPERS ----------
+  function scrapeAssignments() {
+    document.querySelectorAll(".activity.assign").forEach(el => {
+      const title = el.querySelector(".instancename")?.innerText;
+      if (!title) return;
+
+      state.courses[getCurrentCourse().course_id].assignments.push({
         title,
-        due_date: dueText || null,
-        grade,
-        submitted,
-        submission_delay
+        due_date: el.innerText.match(/Due\s*(.*)/i)?.[1] || null,
+        submitted: el.innerText.includes("Submitted"),
+        grade: null
       });
-    }
-  });
-}
+    });
+  }
 
-function scrapeQuizzes() {
-  document.querySelectorAll('table.quizzes tbody tr').forEach(row => {
-    const title = row.querySelector('td.quizname a')?.innerText.trim();
-    const scoreText = row.querySelector('td.score')?.innerText.trim();
-    const attemptsText = row.querySelector('td.attempts')?.innerText.trim();
-    const timeText = row.querySelector('td.time_spent')?.innerText.trim();
+  function scrapeQuizzes() {
+    document.querySelectorAll(".activity.quiz").forEach(el => {
+      const title = el.querySelector(".instancename")?.innerText;
+      if (!title) return;
 
-    const score = scoreText ? parseFloat(scoreText) : null;
-    const attempts = attemptsText ? parseInt(attemptsText) : 0;
-    const time_spent = timeText ? parseInt(timeText) : 0;
-
-    const courseUrl = window.location.href.split('?id=')[0];
-    if(courseUrl && window.__MOODLE_AI_STATE__.courses[courseUrl]) {
-      window.__MOODLE_AI_STATE__.courses[courseUrl].quizzes.push({
+      state.courses[getCurrentCourse().course_id].quizzes.push({
         title,
-        score,
-        attempts,
-        time_spent
+        attempts: null,
+        score: null,
+        time_spent_ms: 0
       });
-    }
-  });
-}
-
-function scrapeFinalGrades() {
-  const courseUrl = window.location.href.split('?id=')[0];
-  const gradeText = document.querySelector("td.final-grade")?.innerText?.trim();
-  const grade = gradeText ? parseFloat(gradeText) : null;
-  if(courseUrl && window.__MOODLE_AI_STATE__.courses[courseUrl]) {
-    window.__MOODLE_AI_STATE__.courses[courseUrl].finalGrade = grade;
-  }
-}
-
-// ---------- Transform to AI Features ----------
-function computeAIFeatures() {
-  const state = window.__MOODLE_AI_STATE__;
-  state.student_id = hashStudentId();
-
-  let totalTime = 0;
-  let activeDaysSet = new Set();
-  let allQuizScores = [];
-  let allAssignmentScores = [];
-  let lateSubmissions = 0;
-  let totalAssignments = 0;
-  let totalFinalGrades = 0;
-  let coursesWithGrades = 0;
-
-  state.sessions.forEach(s => {
-    totalTime += s.active_time;
-    activeDaysSet.add(new Date(s.start_time).toDateString());
-  });
-
-  Object.values(state.courses).forEach(course => {
-    course.assignments.forEach(a => {
-      if(a.grade != null) allAssignmentScores.push(a.grade);
-      if(a.submission_delay > 0) lateSubmissions++;
-      totalAssignments++;
-    });
-    course.quizzes.forEach(q => {
-      if(q.score != null) allQuizScores.push(q.score);
-    });
-    if(course.finalGrade != null) {
-      totalFinalGrades += course.finalGrade;
-      coursesWithGrades++;
-    }
-  });
-
-  const avgQuizScore = allQuizScores.length ? allQuizScores.reduce((a,b)=>a+b,0)/allQuizScores.length : 0;
-  const quizScoreStd = allQuizScores.length ? Math.sqrt(allQuizScores.map(x=>Math.pow(x-avgQuizScore,2)).reduce((a,b)=>a+b,0)/allQuizScores.length) : 0;
-  const avgAssignmentScore = allAssignmentScores.length ? allAssignmentScores.reduce((a,b)=>a+b,0)/allAssignmentScores.length : 0;
-  const lateSubmissionRatio = totalAssignments ? lateSubmissions/totalAssignments : 0;
-  const avgFinalGrade = coursesWithGrades ? totalFinalGrades / coursesWithGrades : 0;
-
-  return {
-    student_id: state.student_id,
-    total_time_spent: totalTime,
-    active_days: activeDaysSet.size,
-    access_frequency: state.sessions.length,
-    avg_quiz_score: avgQuizScore,
-    quiz_score_std: quizScoreStd,
-    avg_assignment_score: avgAssignmentScore,
-    late_submission_ratio: lateSubmissionRatio,
-    avg_final_grade: avgFinalGrade
-  };
-}
-
-// ---------- Send to FastAPI ----------
-async function sendToBackend() {
-  const payload = computeAIFeatures();
-  try {
-    await fetch("http://localhost:8000/predict", {
-      method:"POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(payload)
-    });
-    console.log("Data sent to backend:", payload);
-  } catch(err) {
-    console.error("Error sending data:", err);
-  }
-}
-
-// ---------- Run Scraper ----------
-function runScraper() {
-  scrapeCourses();
-  scrapeAssignments();
-  scrapeQuizzes();
-  scrapeFinalGrades();
-  persistData();
-  console.log("Scraped state:", window.__MOODLE_AI_STATE__);
-  console.log("AI-ready features:", computeAIFeatures());
-  // Optional: sendToBackend();
-}
-
-// ---------- Initial Run ----------
-window.addEventListener("load", () => runScraper());
-
-// ---------- Popup Messaging ----------
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if(msg.type === "FORCE_SYNC") runScraper();
-  if(msg.type === "EXPORT_DATA") {
-    chrome.storage.local.get(STORAGE_KEY_MOODLE_AI, res => {
-      const data = res[STORAGE_KEY_MOODLE_AI]?.payload;
-      if(!data) return;
-      const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "moodle_student_data.json";
-      a.click();
-      URL.revokeObjectURL(url);
     });
   }
-});
+
+  function scrapeGrades() {
+    document.querySelectorAll("table.user-grade tbody tr").forEach(row => {
+      const item = row.querySelector(".column-itemname")?.innerText;
+      const grade = row.querySelector(".column-grade")?.innerText;
+      if (!item || !grade) return;
+
+      if (item.toLowerCase().includes("total")) {
+        getCurrentCourse().final_grade = grade;
+      }
+    });
+  }
+
+  // ---------- PAGE DETECTION ----------
+  const url = location.href;
+  if (url.includes("/mod/assign/")) scrapeAssignments();
+  if (url.includes("/mod/quiz/")) scrapeQuizzes();
+  if (url.includes("/grade/report/user")) scrapeGrades();
+
+  // ---------- STORAGE ----------
+  function persist() {
+    chrome.storage.local.set({
+      [STORAGE_KEY]: {
+        collected_at: new Date().toISOString(),
+        payload: state
+      }
+    });
+  }
+
+  setInterval(persist, 5000);
+
+  console.log("AcademIQ content.js running", state);
+})();

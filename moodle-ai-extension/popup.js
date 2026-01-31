@@ -1,86 +1,58 @@
-const riskDisplay = document.getElementById("riskDisplay");
-const status = document.getElementById("status");
-const syncBtn = document.getElementById("syncBtn");
-const exportBtn = document.getElementById("exportBtn");
+// ================================
+// academIQ – popup.js
+// Manual control UI
+// ================================
 
-const STORAGE_KEY = "MIU_MOODLE_DATA_V1";
+document.addEventListener("DOMContentLoaded", () => {
 
-// Update risk display
-function updateRiskUI(result) {
-  if (!result || !result.risk_level) {
-    riskDisplay.innerText = "No prediction yet";
-    riskDisplay.className = "risk";
-    return;
-  }
+  const statusEl = document.getElementById("status");
+  const dataEl = document.getElementById("dataPreview");
+  const sendBtn = document.getElementById("sendBtn");
+  const clearBtn = document.getElementById("clearBtn");
 
-  riskDisplay.innerText = `Risk: ${result.risk_level}\n${result.recommendation}`;
-  riskDisplay.className = `risk ${result.risk_level.toLowerCase()}`;
-}
-
-// Fetch latest stored prediction
-function fetchLatestPrediction(callback) {
-  chrome.storage.local.get(STORAGE_KEY, res => {
-    const payload = res[STORAGE_KEY]?.payload;
-    if (!payload) {
-      status.innerText = "No data collected yet.";
-      updateRiskUI(null);
-      if (callback) callback(null);
+  // ----------------------------
+  // Check background health
+  // ----------------------------
+  chrome.runtime.sendMessage({ type: "PING" }, (res) => {
+    if (chrome.runtime.lastError || !res?.success) {
+      statusEl.innerText = "❌ Background not reachable";
       return;
     }
-
-    // Use prediction if exists
-    updateRiskUI(payload.prediction || null);
-    status.innerText = "Data loaded from storage.";
-    if (callback) callback(payload);
+    statusEl.innerText = "🟢 Extension active";
   });
-}
 
-// ---------- Sync Button ----------
-syncBtn.addEventListener("click", () => {
-  status.innerText = "Syncing data...";
-
-  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-    if (!tabs || !tabs.length) {
-      status.innerText = "No active tab found.";
-      return;
-    }
-
-    const tabId = tabs[0].id;
-
-    // Inject content script if not present
-    chrome.scripting.executeScript(
-      { target: { tabId }, files: ["content.js"] },
-      () => {
-        // Send FORCE_SYNC message
-        chrome.tabs.sendMessage(tabId, { type: "FORCE_SYNC" }, response => {
-          if (chrome.runtime.lastError) {
-            status.innerText = "Content script not ready on this page.";
-            return;
-          }
-          status.innerText = "Data synced successfully.";
-          fetchLatestPrediction(); // refresh popup UI
-        });
-      }
-    );
-  });
-});
-
-// ---------- Export Button ----------
-exportBtn.addEventListener("click", () => {
-  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-    if (!tabs || !tabs.length) return;
-
-    const tabId = tabs[0].id;
-
-    chrome.tabs.sendMessage(tabId, { type: "EXPORT_DATA" }, response => {
-      if (chrome.runtime.lastError) {
-        status.innerText = "Content script not ready on this page.";
+  // ----------------------------
+  // Load raw stored events
+  // ----------------------------
+  function loadData() {
+    chrome.runtime.sendMessage({ type: "GET_RAW_EVENTS" }, (res) => {
+      if (!res?.success) {
+        dataEl.innerText = "No data available";
         return;
       }
-      status.innerText = "Exporting JSON...";
+
+      const events = res.data.events || [];
+      dataEl.innerText = JSON.stringify(events.slice(-10), null, 2);
+    });
+  }
+
+  loadData();
+
+  // ----------------------------
+  // Manual Send (backend later)
+  // ----------------------------
+  sendBtn.addEventListener("click", () => {
+    statusEl.innerText = "📦 Ready to send (backend not connected)";
+    console.log("Send pressed – data stays local for now");
+  });
+
+  // ----------------------------
+  // Clear local data
+  // ----------------------------
+  clearBtn.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ type: "CLEAR_RAW_EVENTS" }, () => {
+      dataEl.innerText = "";
+      statusEl.innerText = "🧹 Local data cleared";
     });
   });
 });
-
-// ---------- On Popup Load ----------
-fetchLatestPrediction();
