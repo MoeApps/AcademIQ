@@ -1,85 +1,72 @@
-document.addEventListener("DOMContentLoaded", () => {
+const loadDataBtn = document.getElementById("loadDataBtn");
+const downloadJsonBtn = document.getElementById("downloadJsonBtn");
+const sendBackendBtn = document.getElementById("sendBackendBtn");
+const outputDiv = document.getElementById("output");
 
-  const statusEl = document.getElementById("status");
-  const dataEl = document.getElementById("dataPreview");
-  const sendBtn = document.getElementById("sendBtn");
-  const clearBtn = document.getElementById("clearBtn");
+const STORAGE_KEY = "MIU_MOODLE_DATA_V1";
 
-  // Health check
-  chrome.runtime.sendMessage({ type: "PING" }, (res) => {
-    if (chrome.runtime.lastError || !res?.success) {
-      statusEl.innerText = "❌ Background not reachable";
-      return;
-    }
-    statusEl.innerText = "🟢 Extension active";
-  });
+function logOutput(msg) {
+    outputDiv.textContent += msg + "\n";
+}
 
-  // Load raw stored events
-  function loadData() {
-    chrome.runtime.sendMessage({ type: "GET_RAW_EVENTS" }, (res) => {
-      if (!res?.success) {
-        dataEl.innerText = "No data available";
-        return;
-      }
-      const events = res.data.events || [];
-      dataEl.innerText = JSON.stringify(events.slice(-10), null, 2);
+// --- Load stored data ---
+loadDataBtn.addEventListener("click", () => {
+    chrome.storage.local.get("moodleData", res => {
+        if (!res.moodleData?.payload) {
+            outputDiv.textContent = "No data found!";
+            return;
+        }
+        const data = res.moodleData.payload;
+        outputDiv.textContent = JSON.stringify(data, null, 2);
     });
-  }
+});
 
-  loadData();
-
-  // ---------- Manual Send ----------
-  sendBtn.addEventListener("click", async () => {
-    statusEl.innerText = "📦 Sending raw data...";
-
-    // 1️⃣ Get stored raw events from background
-    chrome.runtime.sendMessage({ type: "GET_RAW_EVENTS" }, async (res) => {
-      if (!res?.success) {
-        statusEl.innerText = "❌ No raw data";
-        return;
-      }
-
-      const rawPayload = res.data.payload;
-      if (!rawPayload) {
-        statusEl.innerText = "❌ No payload found";
-        return;
-      }
-
-      try {
-        // 2️⃣ Send to /ingest
-        const ingestRes = await fetch("http://localhost:8000/ingest", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(rawPayload)
-        });
-        const ingestData = await ingestRes.json();
-        if (!ingestData.features) throw new Error("Ingest failed");
-
-        statusEl.innerText = "✅ Features computed";
-
-        // 3️⃣ Send features to /predict
-        const predictRes = await fetch("http://localhost:8000/predict", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(ingestData.features)
-        });
-        const predictData = await predictRes.json();
-
-        // 4️⃣ Show risk + recommendation
-        dataEl.innerText = JSON.stringify(predictData, null, 2);
-
-      } catch (err) {
-        console.error(err);
-        statusEl.innerText = "❌ Error: " + err.message;
-      }
+// --- Download JSON ---
+downloadJsonBtn.addEventListener("click", () => {
+    chrome.storage.local.get("moodleData", res => {
+        if (!res.moodleData?.payload) return alert("No data to download.");
+        const blob = new Blob([JSON.stringify(res.moodleData.payload, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "moodle_student_data.json";
+        a.click();
+        URL.revokeObjectURL(url);
     });
-  });
+});
 
-  // ---------- Clear local data ----------
-  clearBtn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "CLEAR_RAW_EVENTS" }, () => {
-      dataEl.innerText = "";
-      statusEl.innerText = "🧹 Local data cleared";
+// --- Send to backend: ingest -> predict ---
+sendBackendBtn.addEventListener("click", async () => {
+    chrome.storage.local.get("moodleData", async res => {
+        if (!res.moodleData?.payload) return alert("No data to send.");
+        const rawPayload = res.moodleData.payload;
+
+        outputDiv.textContent = "Sending data to backend (/ingest)...\n";
+
+        try {
+            // 1️⃣ Send raw Moodle JSON to /ingest
+            const ingestResp = await fetch("http://localhost:8000/ingest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(rawPayload)
+            });
+            const ingestData = await ingestResp.json();
+            logOutput("Ingest complete. Computed features:\n" + JSON.stringify(ingestData.features, null, 2));
+
+            // 2️⃣ Send features to /predict
+            const predictResp = await fetch("http://localhost:8000/predict", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(ingestData.features)
+            });
+            const predictData = await predictResp.json();
+            logOutput("\nPrediction complete:\n" + JSON.stringify(predictData, null, 2));
+
+            // Optionally: call /store_result if you have one
+            // await fetch("http://localhost:8000/store_result", { ... });
+
+        } catch (err) {
+            logOutput("Error sending to backend: " + err);
+        }
     });
-  });
 });

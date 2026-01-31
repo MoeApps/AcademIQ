@@ -1,169 +1,194 @@
-// =======================================
-// AcademIQ – content.js (FINAL VERSION)
-// Raw Moodle Data Collector
-// =======================================
-
+// content.js - Moodle AI Scraper (Working Version)
 (() => {
-  // ---------- CONSTANTS ----------
-  const STORAGE_KEY = "ACADEMIQ_RAW_EVENTS_V1";
+    console.log("[MoodleScraper] Content script started");
 
-  // ---------- STATE ----------
-  const state = {
-    student_id: null,
-    sessions: [],
-    clicks: 0,
-    courses: {},
-    lastActivity: Date.now()
-  };
+    // --- Student ID ---
+    const studentId = localStorage.getItem("student_id") || generateHashedId();
+    localStorage.setItem("student_id", studentId);
 
-  let currentSession = null;
-  let sessionStart = Date.now();
-
-  // ---------- HELPERS ----------
-  function now() {
-    return Date.now();
-  }
-
-  function getCourseIdFromUrl(url) {
-    const match = url.match(/course\/view\.php\?id=(\d+)/);
-    return match ? match[1] : null;
-  }
-
-  function getCurrentCourse() {
-    const id = getCourseIdFromUrl(location.href);
-    if (!id) return null;
-
-    if (!state.courses[id]) {
-      state.courses[id] = {
-        course_id: id,
-        name: document.querySelector("h1")?.innerText || "Unknown Course",
-        visits: 0,
-        time_spent_ms: 0,
-        assignments: [],
-        quizzes: [],
-        final_grade: null
-      };
-    }
-    return state.courses[id];
-  }
-
-  // ---------- SESSION TRACKING ----------
-  function startSession() {
-    currentSession = {
-      start: now(),
-      end: null,
-      duration_ms: 0
+    // --- State ---
+    const state = {
+        clicks: 0,
+        lastActivity: Date.now(),
+        sessions: [],
+        currentSession: { start: Date.now(), end: null, active_time_ms: 0, idle_time_ms: 0 },
+        courses: {}
     };
-    sessionStart = now();
-  }
 
-  function endSession() {
-    if (!currentSession) return;
-    currentSession.end = now();
-    currentSession.duration_ms = currentSession.end - currentSession.start;
-    state.sessions.push(currentSession);
-    currentSession = null;
-  }
+    let idleStart = Date.now();
 
-  startSession();
+    // --- Activity Tracking ---
+    document.addEventListener("click", () => {
+        state.clicks += 1;
+        state.lastActivity = Date.now();
+    });
 
-  // ---------- ACTIVITY TRACKING ----------
-  function markActivity() {
-    const t = now();
-    if (currentSession) {
-      currentSession.duration_ms += t - state.lastActivity;
+    document.addEventListener("mousemove", () => {
+        const now = Date.now();
+        if (now - state.lastActivity > 60000) { // idle
+            state.currentSession.idle_time_ms += now - idleStart;
+            idleStart = now;
+        }
+        state.lastActivity = now;
+    });
+
+    function generateHashedId() {
+        return 'stu_' + Math.random().toString(36).substr(2, 9);
     }
-    state.lastActivity = t;
 
-    const course = getCurrentCourse();
-    if (course) {
-      course.time_spent_ms += t - state.lastActivity;
+    // --- Page detection ---
+    function detectPageType() {
+        const url = window.location.href;
+        if (url.includes("/my/")) return "DASHBOARD";
+        if (url.includes("/course/view.php")) return "COURSE";
+        if (url.includes("/mod/assign/")) return "ASSIGNMENTS";
+        if (url.includes("/grade/report/user")) return "GRADES";
+        return "UNKNOWN";
     }
-  }
 
-  ["mousemove", "keydown", "scroll", "click"].forEach(evt => {
-    document.addEventListener(evt, () => {
-      if (evt === "click") state.clicks++;
-      markActivity();
-    }, true);
-  });
+    function waitForElement(selector, callback) {
+        const el = document.querySelector(selector);
+        if (el) return callback();
 
-  // ---------- VISIBILITY / IDLE ----------
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      endSession();
-    } else {
-      startSession();
+        const observer = new MutationObserver(() => {
+            const el = document.querySelector(selector);
+            if (el) {
+                observer.disconnect();
+                callback();
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
     }
-  });
 
-  window.addEventListener("beforeunload", () => {
-    endSession();
-    persist();
-  });
+    // --- Scrape functions ---
+    function scrapeDashboard() {
+        const courses = [...document.querySelectorAll('a[href*="course/view.php"]')]
+            .map(a => ({ title: a.innerText.trim(), url: a.href }))
+            .filter(c => c.title);
 
-  // ---------- PAGE VISITS ----------
-  const course = getCurrentCourse();
-  if (course) course.visits++;
+        courses.forEach(c => {
+            if (!state.courses[c.url]) {
+                state.courses[c.url] = {
+                    name: c.title,
+                    visits: 1,
+                    time_spent_ms: 0,
+                    assignments: [],
+                    quizzes: [],
+                    resources: [],
+                    finalGrade: null
+                };
+            } else {
+                state.courses[c.url].visits += 1;
+            }
+        });
 
-  // ---------- SCRAPERS ----------
-  function scrapeAssignments() {
-    document.querySelectorAll(".activity.assign").forEach(el => {
-      const title = el.querySelector(".instancename")?.innerText;
-      if (!title) return;
+        console.log("[MoodleScraper] Dashboard courses:", Object.keys(state.courses));
+    }
 
-      state.courses[getCurrentCourse().course_id].assignments.push({
-        title,
-        due_date: el.innerText.match(/Due\s*(.*)/i)?.[1] || null,
-        submitted: el.innerText.includes("Submitted"),
-        grade: null
-      });
-    });
-  }
+    function scrapeCoursePage() {
+        const name = document.querySelector("h1")?.innerText.trim();
+        if (!name) return;
+        console.log("[MoodleScraper] On course page:", name);
+    }
 
-  function scrapeQuizzes() {
-    document.querySelectorAll(".activity.quiz").forEach(el => {
-      const title = el.querySelector(".instancename")?.innerText;
-      if (!title) return;
+    function scrapeAssignmentsPage() {
+        const assignments = [];
 
-      state.courses[getCurrentCourse().course_id].quizzes.push({
-        title,
-        attempts: null,
-        score: null,
-        time_spent_ms: 0
-      });
-    });
-  }
+        document.querySelectorAll('a[href*="/mod/assign/view.php"]').forEach(link => {
+            const container = link.closest(".activity.assign");
+            const text = container?.innerText || "";
+            const due = text.match(/Due[:\s].*/i)?.[0] || null;
 
-  function scrapeGrades() {
-    document.querySelectorAll("table.user-grade tbody tr").forEach(row => {
-      const item = row.querySelector(".column-itemname")?.innerText;
-      const grade = row.querySelector(".column-grade")?.innerText;
-      if (!item || !grade) return;
+            assignments.push({
+                title: link.innerText.trim(),
+                url: link.href,
+                dueDate: due,
+                status: null,
+                grade: null
+            });
 
-      if (item.toLowerCase().includes("total")) {
-        getCurrentCourse().final_grade = grade;
-      }
-    });
-  }
+            // Map to course
+            const courseUrl = window.location.href.split("?")[0]; // crude course identifier
+            if (!state.courses[courseUrl]) {
+                state.courses[courseUrl] = { name: "Unknown Course", visits: 1, time_spent_ms: 0, assignments: [], quizzes: [], resources: [], finalGrade: null };
+            }
+            state.courses[courseUrl].assignments.push(assignments[assignments.length - 1]);
+        });
 
-  // ---------- PAGE DETECTION ----------
-  const url = location.href;
-  if (url.includes("/mod/assign/")) scrapeAssignments();
-  if (url.includes("/mod/quiz/")) scrapeQuizzes();
-  if (url.includes("/grade/report/user")) scrapeGrades();
+        console.log("[MoodleScraper] Assignments scraped:", assignments);
+    }
 
-  // ---------- STORAGE ----------
-  function persist() {
-    chrome.storage.local.set({
-      [STORAGE_KEY]: {
-        collected_at: new Date().toISOString(),
-        payload: state
-      }
-    });
-  }
+    function scrapeGradesPage() {
+        const grades = [];
 
-  setInterval(persist, 5000);
+        document.querySelectorAll("table.user-grade tbody tr").forEach(row => {
+            const item = row.querySelector("th.column-itemname")?.innerText.trim();
+            const grade = row.querySelector("td.column-grade")?.innerText.trim();
+            const max = row.querySelector("td.column-range")?.innerText.trim();
 
-  console.log("AcademIQ content.js running", state);
+            if (item && grade) {
+                grades.push({ item, grade, max });
+
+                // Map to course
+                const courseUrl = window.location.href.split("?")[0];
+                if (!state.courses[courseUrl]) {
+                    state.courses[courseUrl] = { name: "Unknown Course", visits: 1, time_spent_ms: 0, assignments: [], quizzes: [], resources: [], finalGrade: null };
+                }
+                state.courses[courseUrl].grades = state.courses[courseUrl].grades || [];
+                state.courses[courseUrl].grades.push({ item, grade, max });
+            }
+        });
+
+        console.log("[MoodleScraper] Grades scraped:", grades);
+    }
+
+    // --- Main runner ---
+    function runScraper() {
+        const page = detectPageType();
+        console.log("[MoodleScraper] Detected page:", page);
+
+        switch (page) {
+            case "DASHBOARD":
+                waitForElement('a[href*="course/view.php"]', scrapeDashboard);
+                break;
+            case "COURSE":
+                waitForElement("h1", scrapeCoursePage);
+                break;
+            case "ASSIGNMENTS":
+                waitForElement('a[href*="/mod/assign/view.php"]', scrapeAssignmentsPage);
+                break;
+            case "GRADES":
+                waitForElement("table.user-grade", scrapeGradesPage);
+                break;
+        }
+
+        // Update session
+        state.currentSession.end = Date.now();
+        state.currentSession.active_time_ms = state.currentSession.end - state.currentSession.start - state.currentSession.idle_time_ms;
+        if (state.currentSession.active_time_ms > 0 || state.currentSession.idle_time_ms > 0) {
+            state.sessions.push({ ...state.currentSession });
+            state.currentSession = { start: Date.now(), end: null, active_time_ms: 0, idle_time_ms: 0 };
+        }
+
+        // Persist data to chrome.storage
+        const data = {
+            student_id: studentId,
+            clicks: state.clicks,
+            lastActivity: state.lastActivity,
+            sessions: state.sessions,
+            courses: state.courses
+        };
+
+        chrome.storage.local.set({ moodle_data: data }, () => {
+            console.log("[MoodleScraper] Data saved:", data);
+        });
+    }
+
+    // --- Mutation observer for dynamic content ---
+    const observer = new MutationObserver(() => runScraper());
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // --- Initial run ---
+    window.addEventListener("load", runScraper);
+
 })();

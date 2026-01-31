@@ -10,7 +10,7 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://moodle.miu.edu.eg/*",
+    "https://*.miu.edu.eg/*",
     "http://localhost:8000/*"
   ],
   "action": {
@@ -28,3 +28,8 @@
     "service_worker": "background.js"
   }
 }
+
+
+
+ 
+ 

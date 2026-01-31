@@ -1,35 +1,38 @@
-// ================================
-// academIQ – background.js
-// Storage + message broker ONLY
-// ================================
-
-const STORAGE_KEY = "academiq_raw_events";
-
-// Listen for messages from popup or future UI
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === "get_data") {
+        chrome.storage.local.get("moodle_data", (result) => {
+            sendResponse({ data: result.moodle_data || null });
+        });
+        return true; // async
+    }
 
-  // ---- Get stored raw events ----
-  if (message.type === "GET_RAW_EVENTS") {
-    chrome.storage.local.get([STORAGE_KEY], (res) => {
-      sendResponse({
-        success: true,
-        data: res[STORAGE_KEY] || { events: [] }
-      });
-    });
-    return true; // async response
-  }
+    if (message.type === "clear_data") {
+        chrome.storage.local.remove("moodle_data", () => {
+            sendResponse({ status: "cleared" });
+        });
+        return true;
+    }
 
-  // ---- Clear stored events (after send) ----
-  if (message.type === "CLEAR_RAW_EVENTS") {
-    chrome.storage.local.remove([STORAGE_KEY], () => {
-      sendResponse({ success: true });
-    });
-    return true;
-  }
+    if (message.type === "send_to_backend") {
+        chrome.storage.local.get("moodle_data", async (result) => {
+            const data = result.moodle_data;
+            if (!data) return sendResponse({ status: "no_data" });
 
-  // ---- Health check (debugging) ----
-  if (message.type === "PING") {
-    sendResponse({ success: true, msg: "background.js alive" });
-    return true;
-  }
+            try {
+                await fetch("http://localhost:8000/ingest", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                });
+
+                const predictRes = await fetch("http://localhost:8000/predict", { method: "POST" });
+                const storeRes = await fetch("http://localhost:8000/store_result", { method: "POST" });
+
+                sendResponse({ status: "success", predictRes, storeRes });
+            } catch (err) {
+                sendResponse({ status: "error", error: err.message });
+            }
+        });
+        return true;
+    }
 });
