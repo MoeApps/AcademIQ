@@ -71,34 +71,108 @@
 
     const cleanText = (value) => value?.replace(/\s+/g, " ").trim() || null;
 
-    const extractMaterialsFromCourse = (courseId) => {
+    const parseMaterialId = (url, activity) => {
+        const fromUrl = url?.match(/[?&](?:id|cmid)=([^&#]+)/i)?.[1];
+        if (fromUrl) return fromUrl;
+        return activity?.getAttribute("data-id") || activity?.id || `material_${Math.random().toString(36).slice(2, 9)}`;
+    };
+
+    const parseFileType = (url, title, activity) => {
+        const fileName = url?.split("?")[0] || "";
+        const extension = (fileName.match(/\.([a-z0-9]+)$/i)?.[1] || "").toLowerCase();
+        if (extension) return extension;
+
+        const iconSrc = activity?.querySelector("img.activityicon")?.getAttribute("src") || "";
+        const iconAlt = activity?.querySelector("img.activityicon")?.getAttribute("alt") || "";
+        const hint = `${iconSrc} ${iconAlt} ${title || ""}`.toLowerCase();
+
+        if (hint.includes("pdf")) return "pdf";
+        if (hint.includes("word") || hint.includes("doc")) return "docx";
+        if (hint.includes("link") || hint.includes("url")) return "link";
+        if (hint.includes("page") || hint.includes("lecture")) return "html";
+        return "html";
+    };
+
+    const classifyMaterialType = (activity, title, fileType, url) => {
+        const classList = activity?.className || "";
+        const text = `${title || ""} ${url || ""}`.toLowerCase();
+
+        if (classList.includes("assign") || text.includes("assignment")) return "assignment";
+        if (classList.includes("quiz") || text.includes("quiz")) return "quiz";
+        if (classList.includes("url") || fileType === "link") return "link";
+        if (classList.includes("page") || text.includes("lecture")) return "lecture";
+        if (classList.includes("folder") || text.includes("lab") || text.includes("tutorial")) return "lab";
+        if (fileType === "pdf") return "pdf";
+        if (classList.includes("resource")) return "pdf";
+        return "lecture";
+    };
+
+    const parseSectionName = (activity) => {
+        const section = activity?.closest("li.section, .course-section, .topics .section, section.course-section");
+        const heading = section?.querySelector(".sectionname, h3.sectionname, .section-title, .course-section-header h3");
+        return cleanText(heading?.textContent) || "General";
+    };
+
+    const parseAvailabilityStatus = (activity) => {
+        const availability = cleanText(activity?.querySelector(".availabilityinfo")?.textContent);
+        if (availability) return availability;
+
+        const restricted = activity?.classList.contains("dimmed") || activity?.classList.contains("hidden") || activity?.classList.contains("stealth");
+        return restricted ? "restricted" : "available";
+    };
+
+    const parseDueDate = (activity) => {
+        const explicitDate = cleanText(activity?.querySelector(".activitydate")?.textContent);
+        if (explicitDate) return explicitDate;
+
+        const text = cleanText(activity?.textContent);
+        const dueMatch = text?.match(/(?:due\s*(?:date|on)?\s*:?\s*)([^\n|]+)/i);
+        return dueMatch?.[1]?.trim() || null;
+    };
+
+    const parseFileSize = (activity) => {
+        const text = cleanText(activity?.textContent) || "";
+        const sizeMatch = text.match(/\b(\d+(?:\.\d+)?)\s?(KB|MB|GB)\b/i);
+        return sizeMatch ? `${sizeMatch[1]} ${sizeMatch[2].toUpperCase()}` : null;
+    };
+
+    const extractMaterialsFromCourse = (course) => {
         const materials = [];
-        document.querySelectorAll(".activity").forEach((activity) => {
-            const link = activity.querySelector("a");
+        const seen = new Set();
+        const activities = document.querySelectorAll(".activity, li.activity, .modtype_resource, .course-section .activity-item");
+
+        activities.forEach((activity) => {
+            const link = activity.querySelector("a.aalink, .activityname a, a[href]");
             const title = cleanText(activity.querySelector(".instancename")?.textContent || link?.textContent);
             const url = link?.href;
             if (!title || !url) return;
 
-            const classList = activity.className;
-            let materialType = "resource";
-            if (classList.includes("assign")) materialType = "assignment";
-            if (classList.includes("quiz")) materialType = "quiz";
-            if (classList.includes("resource")) materialType = "pdf";
-            if (classList.includes("page")) materialType = "lecture";
-            if (classList.includes("url")) materialType = "link";
+            const materialId = parseMaterialId(url, activity);
+            const fileType = parseFileType(url, title, activity);
+            const materialType = classifyMaterialType(activity, title, fileType, url);
+            const downloadable = Boolean(url && (fileType === "pdf" || /\/pluginfile\.php\//.test(url) || /\/mod\/resource\//.test(url)));
+            const dedupeKey = `${course.course_id || "unknown"}-${materialId}-${url}`;
 
-            const availability = cleanText(activity.querySelector(".availabilityinfo")?.textContent);
-            const dueDate = cleanText(activity.querySelector(".activitydate")?.textContent);
+            if (seen.has(dedupeKey)) return;
+            seen.add(dedupeKey);
 
             materials.push({
-                course_id: courseId,
+                course_id: course.course_id,
+                course_name: course.course_name,
+                section_name: parseSectionName(activity),
+                material_id: materialId,
                 material_type: materialType,
                 title,
+                file_type: fileType,
+                file_size: parseFileSize(activity),
                 url,
-                availability_status: availability,
-                due_date: dueDate
+                downloadable,
+                due_date: parseDueDate(activity),
+                availability_status: parseAvailabilityStatus(activity),
+                extracted_at: new Date().toISOString()
             });
         });
+
         return materials;
     };
 
@@ -196,7 +270,7 @@
         sendPageView(pageType, course);
 
         if (pageType === "course") {
-            const materials = extractMaterialsFromCourse(course.course_id);
+            const materials = extractMaterialsFromCourse(course);
             if (materials.length) {
                 sendMessage("materials", materials);
             }
@@ -248,5 +322,8 @@
     const observer = new MutationObserver(() => handleScrape());
     observer.observe(document.body, { childList: true, subtree: true });
 
-    window.addEventListener("load", handleScrape);
+    window.addEventListener("load", () => {
+        handleScrape();
+        setTimeout(handleScrape, 1200);
+    });
 })();

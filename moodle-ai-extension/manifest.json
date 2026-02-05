@@ -5,7 +5,8 @@
   "description": "Client-side assistant for MIU Moodle data extraction and AI risk prediction",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -25,8 +26,3 @@
     "service_worker": "background.js"
   }
 }
-
-
-
- 
- 

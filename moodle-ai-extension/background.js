@@ -140,7 +140,8 @@ const mergeGrades = (data, grades) => {
 
 const mergeMaterials = (data, materials) => {
     materials.forEach((material) => {
-        const key = `${material.course_id}-${material.url}`;
+        const stableMaterialId = material.material_id || material.url || material.title || "unknown";
+        const key = `${material.course_id || "unknown"}-${stableMaterialId}-${material.url || "no-url"}`;
         if (!data.learning_materials.some((existing) => existing._key === key)) {
             data.learning_materials.push({ ...material, _key: key });
         }
