@@ -5,25 +5,22 @@
   "description": "Client-side assistant for MIU Moodle data extraction and AI risk prediction",
   "permissions": [
     "storage",
-    "activeTab",
-    "scripting",
     "tabs"
   ],
   "host_permissions": [
-    "https://*.miu.edu.eg/*",
-    "http://localhost:8000/*"
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Moodle AI Assistant"
   },
-"content_scripts": [
-  {
-    "matches": ["https://*.miu.edu.eg/*"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }
-],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "background": {
     "service_worker": "background.js"
   }
