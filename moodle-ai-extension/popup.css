@@ -24,6 +24,11 @@ h2 {
     font-size: 16px;
 }
 
+h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+}
+
 .subtle {
     color: #5f6f86;
     font-size: 12px;
@@ -61,66 +66,8 @@ h2 {
     font-weight: 700;
 }
 
-.course-row {
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #8fa6be;
-    border-radius: 8px;
-    padding: 8px;
-    margin-bottom: 8px;
-    background: #fbfdff;
-}
-
-.course-row.high {
-    border-left-color: #2f9e44;
-}
-
-.course-row.medium {
-    border-left-color: #d08b16;
-}
-
-.course-row.low {
-    border-left-color: #c44545;
-}
-
-.course-row-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.course-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin: 6px 0;
-}
-
-.badge {
-    font-size: 11px;
-    color: #314155;
-    background: #eef4fb;
-    border: 1px solid #d6e4f5;
-    border-radius: 999px;
-    padding: 2px 8px;
-}
-
-.status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-}
-
-.status-dot.high {
-    background: #2f9e44;
-}
-
-.status-dot.medium {
-    background: #d08b16;
-}
-
-.status-dot.low {
-    background: #c44545;
+.material-group {
+    margin-bottom: 10px;
 }
 
 .material-item {
@@ -137,22 +84,6 @@ h2 {
     margin: 4px 0;
 }
 
-.tag-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 6px;
-}
-
-.tag-chip {
-    font-size: 11px;
-    border: 1px solid #d4deea;
-    border-radius: 999px;
-    padding: 2px 8px;
-    color: #405165;
-    background: #f1f5fb;
-}
-
 .row {
     display: flex;
     justify-content: space-between;
@@ -160,6 +91,7 @@ h2 {
     gap: 8px;
 }
 
+select,
 button {
     border: 1px solid #c6d4e1;
     border-radius: 8px;

@@ -9,6 +9,8 @@ const defaultData = () => ({
         program: null,
         enrollment_year: null
     },
+    metricsByCourse: {},
+    materialsByCourse: {},
     courses: [],
     behavior: {
         total_time_spent_on_moodle: 0,
@@ -31,9 +33,29 @@ const defaultData = () => ({
     }
 });
 
+const createDefaultCourseMetrics = (course) => ({
+    course_id: course.course_id,
+    course_name: course.course_name || "Unknown Course",
+    total_visits: 0,
+    last_access_time: null,
+    total_time_spent_seconds: 0,
+    number_of_resources_clicked: 0,
+    number_of_assignments_viewed: 0,
+    number_of_quizzes_viewed: 0,
+    active_days_count: 0,
+    click_count: 0,
+    quiz_attempts: 0,
+    assignment_submissions: 0
+});
+
 const getStoredData = async () => {
     const result = await chrome.storage.local.get(STORAGE_KEY);
-    return result[STORAGE_KEY] || defaultData();
+    const data = result[STORAGE_KEY] || defaultData();
+
+    if (!data.metricsByCourse) data.metricsByCourse = {};
+    if (!data.materialsByCourse) data.materialsByCourse = {};
+
+    return data;
 };
 
 const saveStoredData = async (data) => {
@@ -50,24 +72,31 @@ const toCourseMap = (courses) => {
     return map;
 };
 
-const mergeCourse = (coursesMap, course) => {
+const mergeCourse = (data, coursesMap, course) => {
     if (!course?.course_id) return;
+
     const existing = coursesMap.get(course.course_id);
     if (!existing) {
-        coursesMap.set(course.course_id, {
-            course_id: course.course_id,
-            course_name: course.course_name || "Unknown Course",
-            total_visits: 0,
-            last_access_time: null,
-            total_time_spent_seconds: 0,
-            number_of_resources_clicked: 0,
-            number_of_assignments_viewed: 0,
-            number_of_quizzes_viewed: 0
-        });
+        coursesMap.set(course.course_id, createDefaultCourseMetrics(course));
     } else if (course.course_name && existing.course_name !== course.course_name) {
         existing.course_name = course.course_name;
         coursesMap.set(course.course_id, existing);
     }
+
+    if (!data.metricsByCourse[course.course_id]) {
+        data.metricsByCourse[course.course_id] = createDefaultCourseMetrics(course);
+    } else if (course.course_name) {
+        data.metricsByCourse[course.course_id].course_name = course.course_name;
+    }
+};
+
+const syncMetricsByCourse = (data, coursesMap) => {
+    data.courses = Array.from(coursesMap.values());
+    data.courses.forEach((course) => {
+        if (course.course_id) {
+            data.metricsByCourse[course.course_id] = { ...course };
+        }
+    });
 };
 
 const updateSessionMetrics = (data, timestamp, isClick) => {
@@ -136,9 +165,23 @@ const mergeGrades = (data, grades) => {
         if (!data.grades.some((existing) => existing._key === key)) {
             data.grades.push({ ...grade, _key: key });
         }
+
+        if (!grade.course_id || !data.metricsByCourse[grade.course_id]) return;
+        const courseMetrics = data.metricsByCourse[grade.course_id];
+        const itemType = (grade.item_type || "").toLowerCase();
+
+        if (itemType.includes("quiz")) {
+            courseMetrics.quiz_attempts += 1;
+        }
+
+        if (itemType.includes("assignment")) {
+            const isSubmitted = /submitted|submitted for grading|graded|done/i.test(grade.submission_status || "");
+            if (isSubmitted) {
+                courseMetrics.assignment_submissions += 1;
+            }
+        }
     });
 };
-
 
 const buildKnowledgeBase = (materials = []) => {
     const knowledgeBase = {};
@@ -160,12 +203,39 @@ const buildKnowledgeBase = (materials = []) => {
 
     return knowledgeBase;
 };
+
 const mergeMaterials = (data, materials) => {
     materials.forEach((material) => {
-        const stableMaterialId = material.material_id || material.url || material.title || "unknown";
-        const key = `${material.course_id || "unknown"}-${stableMaterialId}-${material.url || "no-url"}`;
+        const courseId = material.courseId || material.course_id;
+        const materialId = material.id || material.material_id || material.url || material.title || "unknown";
+        const key = `${courseId || "unknown"}-${materialId}-${material.url || "no-url"}`;
+
         if (!data.learning_materials.some((existing) => existing._key === key)) {
-            data.learning_materials.push({ ...material, _key: key });
+            data.learning_materials.push({ ...material, course_id: courseId, material_id: materialId, _key: key });
+        }
+
+        if (!courseId) return;
+        if (!data.materialsByCourse[courseId]) {
+            data.materialsByCourse[courseId] = [];
+        }
+
+        const existsInCourse = data.materialsByCourse[courseId].some((existing) => {
+            const existingId = existing.id || existing.material_id || existing.url;
+            return `${courseId}-${existingId || "unknown"}-${existing.url || "no-url"}` === key;
+        });
+
+        if (!existsInCourse) {
+            data.materialsByCourse[courseId].push({
+                id: materialId,
+                courseId,
+                title: material.title || "Untitled Material",
+                type: material.type || "unknown",
+                url: material.url || null,
+                fileType: material.fileType || material.file_type || "unknown",
+                sourcePage: material.sourcePage || null,
+                downloadable: Boolean(material.downloadable),
+                resolvedUrl: material.resolvedUrl || null
+            });
         }
     });
 
@@ -182,7 +252,7 @@ const finalizeActiveTab = async (tabId, endTime) => {
     }
     const data = await getStoredData();
     const coursesMap = toCourseMap(data.courses);
-    mergeCourse(coursesMap, { course_id: active.courseId, course_name: active.courseName });
+    mergeCourse(data, coursesMap, { course_id: active.courseId, course_name: active.courseName });
 
     const course = coursesMap.get(active.courseId);
     if (course) {
@@ -195,7 +265,7 @@ const finalizeActiveTab = async (tabId, endTime) => {
     updateSessionMetrics(data, endTime, false);
     updateActiveDayAndHours(data, endTime);
 
-    data.courses = Array.from(coursesMap.values());
+    syncMetricsByCourse(data, coursesMap);
     await saveStoredData(data);
     activeTabs.delete(tabId);
 };
@@ -233,7 +303,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
             const data = await getStoredData();
             const coursesMap = toCourseMap(data.courses);
-            mergeCourse(coursesMap, { course_id: payload.course_id, course_name: payload.course_name });
+            mergeCourse(data, coursesMap, { course_id: payload.course_id, course_name: payload.course_name });
             const course = coursesMap.get(payload.course_id);
             if (course) {
                 course.total_visits += 1;
@@ -247,7 +317,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }
                 coursesMap.set(payload.course_id, course);
             }
-            data.courses = Array.from(coursesMap.values());
 
             updateSessionMetrics(data, timestamp, false);
             updateActiveDayAndHours(data, timestamp);
@@ -258,6 +327,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 action_type: "view"
             });
 
+            syncMetricsByCourse(data, coursesMap);
             await saveStoredData(data);
             sendResponse({ status: "ok" });
         })();
@@ -289,6 +359,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 page_type: payload.page_type,
                 action_type: payload.action_type
             });
+
+            if (payload.course_id && data.metricsByCourse[payload.course_id] && payload.action_type === "click") {
+                data.metricsByCourse[payload.course_id].click_count += 1;
+            }
 
             await saveStoredData(data);
             sendResponse({ status: "ok" });
