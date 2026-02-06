@@ -1,7 +1,19 @@
 const STORAGE_KEY = "moodleData";
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 const activeTabs = new Map();
+
+const createDefaultCourseMetrics = (courseId, courseName = "Unknown Course") => ({
+    course_id: courseId,
+    course_name: courseName,
+    // Extracted counters used by the popup (raw values only).
+    total_time_spent: 0,
+    total_visits: 0,
+    material_clicks: 0,
+    active_days: [],
+    quiz_attempts: 0,
+    assignment_submissions: 0,
+    last_access_time: null
+});
 
 const defaultData = () => ({
     student: {
@@ -9,117 +21,65 @@ const defaultData = () => ({
         program: null,
         enrollment_year: null
     },
-    courses: [],
-    behavior: {
-        total_time_spent_on_moodle: 0,
-        active_days_count: 0,
-        session_count: 0,
-        average_session_duration: 0,
-        clicks_per_session: 0,
-        peak_activity_hours: []
-    },
-    events: [],
-    grades: [],
-    learning_materials: [],
-    knowledge_base: {},
-    _meta: {
-        activeDays: [],
-        hourCounts: {},
-        lastActivity: null,
-        sessionStart: null,
-        sessionClicks: 0
-    }
+    // Metrics are isolated by course id to prevent cross-course pollution.
+    metricsByCourse: {},
+    events: []
 });
+
+const normalizeData = (data) => {
+    const normalized = data && typeof data === "object" ? data : defaultData();
+    normalized.student = normalized.student || defaultData().student;
+    normalized.metricsByCourse = normalized.metricsByCourse || {};
+    normalized.events = Array.isArray(normalized.events) ? normalized.events : [];
+
+    // Lightweight migration from older `courses` format.
+    if (Array.isArray(normalized.courses)) {
+        normalized.courses.forEach((course) => {
+            if (!course?.course_id) return;
+            const existing = normalized.metricsByCourse[course.course_id] || createDefaultCourseMetrics(course.course_id, course.course_name);
+            normalized.metricsByCourse[course.course_id] = {
+                ...existing,
+                course_name: course.course_name || existing.course_name,
+                total_time_spent: Number(existing.total_time_spent || course.total_time_spent_seconds || 0),
+                total_visits: Number(existing.total_visits || course.total_visits || 0),
+                material_clicks: Number(existing.material_clicks || course.number_of_resources_clicked || 0),
+                active_days: Array.isArray(existing.active_days) ? existing.active_days : [],
+                quiz_attempts: Number(existing.quiz_attempts || course.number_of_quizzes_viewed || 0),
+                assignment_submissions: Number(existing.assignment_submissions || course.number_of_assignments_viewed || 0),
+                last_access_time: existing.last_access_time || course.last_access_time || null
+            };
+        });
+        delete normalized.courses;
+    }
+
+    return normalized;
+};
 
 const getStoredData = async () => {
     const result = await chrome.storage.local.get(STORAGE_KEY);
-    return result[STORAGE_KEY] || defaultData();
+    return normalizeData(result[STORAGE_KEY]);
 };
 
 const saveStoredData = async (data) => {
-    await chrome.storage.local.set({ [STORAGE_KEY]: data });
+    await chrome.storage.local.set({ [STORAGE_KEY]: normalizeData(data) });
 };
 
-const toCourseMap = (courses) => {
-    const map = new Map();
-    courses.forEach((course) => {
-        if (course.course_id) {
-            map.set(course.course_id, { ...course });
-        }
-    });
-    return map;
-};
-
-const mergeCourse = (coursesMap, course) => {
-    if (!course?.course_id) return;
-    const existing = coursesMap.get(course.course_id);
-    if (!existing) {
-        coursesMap.set(course.course_id, {
-            course_id: course.course_id,
-            course_name: course.course_name || "Unknown Course",
-            total_visits: 0,
-            last_access_time: null,
-            total_time_spent_seconds: 0,
-            number_of_resources_clicked: 0,
-            number_of_assignments_viewed: 0,
-            number_of_quizzes_viewed: 0
-        });
-    } else if (course.course_name && existing.course_name !== course.course_name) {
-        existing.course_name = course.course_name;
-        coursesMap.set(course.course_id, existing);
+const ensureCourseMetrics = (data, courseId, courseName) => {
+    if (!courseId) return null;
+    if (!data.metricsByCourse[courseId]) {
+        data.metricsByCourse[courseId] = createDefaultCourseMetrics(courseId, courseName);
     }
+    if (courseName && data.metricsByCourse[courseId].course_name !== courseName) {
+        data.metricsByCourse[courseId].course_name = courseName;
+    }
+    return data.metricsByCourse[courseId];
 };
 
-const updateSessionMetrics = (data, timestamp, isClick) => {
-    const meta = data._meta || defaultData()._meta;
-    const behavior = data.behavior;
-    const lastActivity = meta.lastActivity;
-
-    const startNewSession = () => {
-        meta.sessionStart = timestamp;
-        meta.sessionClicks = 0;
-        behavior.session_count += 1;
-    };
-
-    if (!meta.sessionStart) {
-        startNewSession();
-    } else if (lastActivity && timestamp - lastActivity > SESSION_TIMEOUT_MS) {
-        const duration = Math.max(0, lastActivity - meta.sessionStart);
-        if (duration > 0) {
-            behavior.average_session_duration =
-                (behavior.average_session_duration * (behavior.session_count - 1) + duration / 1000) /
-                behavior.session_count;
-            behavior.clicks_per_session =
-                (behavior.clicks_per_session * (behavior.session_count - 1) + meta.sessionClicks) /
-                behavior.session_count;
-        }
-        startNewSession();
-    }
-
-    if (isClick) {
-        meta.sessionClicks += 1;
-    }
-
-    meta.lastActivity = timestamp;
-    data._meta = meta;
-};
-
-const updateActiveDayAndHours = (data, timestamp) => {
-    const meta = data._meta || defaultData()._meta;
+const markActiveDay = (courseMetrics, timestamp) => {
     const dayKey = new Date(timestamp).toISOString().slice(0, 10);
-    if (!meta.activeDays.includes(dayKey)) {
-        meta.activeDays.push(dayKey);
+    if (!courseMetrics.active_days.includes(dayKey)) {
+        courseMetrics.active_days.push(dayKey);
     }
-    data.behavior.active_days_count = meta.activeDays.length;
-
-    const hour = new Date(timestamp).getHours();
-    meta.hourCounts[hour] = (meta.hourCounts[hour] || 0) + 1;
-    const sortedHours = Object.entries(meta.hourCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([hourKey]) => Number(hourKey));
-    data.behavior.peak_activity_hours = sortedHours;
-    data._meta = meta;
 };
 
 const addEvent = (data, event) => {
@@ -130,73 +90,48 @@ const addEvent = (data, event) => {
     }
 };
 
-const mergeGrades = (data, grades) => {
+const extractAttemptsFromGrades = (grades = []) => {
+    let quizAttempts = 0;
+    let assignmentSubmissions = 0;
+
     grades.forEach((grade) => {
-        const key = `${grade.course_id}-${grade.item_name}-${grade.item_type}-${grade.submission_time || ""}`;
-        if (!data.grades.some((existing) => existing._key === key)) {
-            data.grades.push({ ...grade, _key: key });
-        }
-    });
-};
+        const type = String(grade.item_type || "").toLowerCase();
+        const status = String(grade.submission_status || "").toLowerCase();
+        const hasGrade = String(grade.grade || "").trim().length > 0;
 
-
-const buildKnowledgeBase = (materials = []) => {
-    const knowledgeBase = {};
-
-    materials.forEach((material) => {
-        const courseName = material.course_name || `Course ${material.course_id || "Unknown"}`;
-        if (!knowledgeBase[courseName]) {
-            knowledgeBase[courseName] = {};
+        if (type.includes("quiz")) {
+            quizAttempts += 1;
         }
 
-        const tags = Array.isArray(material.semantic_tags) && material.semantic_tags.length ? material.semantic_tags : ["general"];
-        tags.forEach((tag) => {
-            if (!knowledgeBase[courseName][tag]) {
-                knowledgeBase[courseName][tag] = [];
-            }
-            knowledgeBase[courseName][tag].push(material);
-        });
-    });
-
-    return knowledgeBase;
-};
-const mergeMaterials = (data, materials) => {
-    materials.forEach((material) => {
-        const stableMaterialId = material.material_id || material.url || material.title || "unknown";
-        const key = `${material.course_id || "unknown"}-${stableMaterialId}-${material.url || "no-url"}`;
-        if (!data.learning_materials.some((existing) => existing._key === key)) {
-            data.learning_materials.push({ ...material, _key: key });
+        if (type.includes("assignment") && (hasGrade || status.includes("submitted") || status.includes("graded"))) {
+            assignmentSubmissions += 1;
         }
     });
 
-    data.knowledge_base = buildKnowledgeBase(data.learning_materials);
+    return { quizAttempts, assignmentSubmissions };
 };
 
 const finalizeActiveTab = async (tabId, endTime) => {
     const active = activeTabs.get(tabId);
     if (!active) return;
-    const durationMs = Math.max(0, endTime - active.startTime);
-    if (durationMs <= 0) {
+
+    const data = await getStoredData();
+    const courseMetrics = ensureCourseMetrics(data, active.courseId, active.courseName);
+    if (!courseMetrics) {
         activeTabs.delete(tabId);
         return;
     }
-    const data = await getStoredData();
-    const coursesMap = toCourseMap(data.courses);
-    mergeCourse(coursesMap, { course_id: active.courseId, course_name: active.courseName });
 
-    const course = coursesMap.get(active.courseId);
-    if (course) {
-        course.total_time_spent_seconds += Math.round(durationMs / 1000);
-        course.last_access_time = new Date(endTime).toISOString();
-        coursesMap.set(active.courseId, course);
+    const durationMs = Math.max(0, endTime - active.startTime);
+    const elapsedSeconds = Math.round(durationMs / 1000);
+
+    if (elapsedSeconds > 0) {
+        courseMetrics.total_time_spent += elapsedSeconds;
+        courseMetrics.last_access_time = new Date(endTime).toISOString();
+        markActiveDay(courseMetrics, endTime);
+        await saveStoredData(data);
     }
 
-    data.behavior.total_time_spent_on_moodle += Math.round(durationMs / 1000);
-    updateSessionMetrics(data, endTime, false);
-    updateActiveDayAndHours(data, endTime);
-
-    data.courses = Array.from(coursesMap.values());
-    await saveStoredData(data);
     activeTabs.delete(tabId);
 };
 
@@ -205,8 +140,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "get_data") {
         chrome.storage.local.get(STORAGE_KEY, (result) => {
-            sendResponse({ data: result[STORAGE_KEY] || null });
+            sendResponse({ data: normalizeData(result[STORAGE_KEY]) });
         });
+        return true;
+    }
+
+    if (message.type === "clear_course") {
+        (async () => {
+            const courseId = message.payload?.course_id;
+            if (!courseId) {
+                sendResponse({ status: "ignored" });
+                return;
+            }
+            const data = await getStoredData();
+            delete data.metricsByCourse[courseId];
+            await saveStoredData(data);
+            sendResponse({ status: "cleared", course_id: courseId });
+        })();
         return true;
     }
 
@@ -219,8 +169,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "page_view") {
         (async () => {
-            const payload = message.payload;
+            const payload = message.payload || {};
             const timestamp = payload.timestamp || Date.now();
+
             if (typeof tabId === "number") {
                 await finalizeActiveTab(tabId, timestamp);
                 activeTabs.set(tabId, {
@@ -232,25 +183,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
 
             const data = await getStoredData();
-            const coursesMap = toCourseMap(data.courses);
-            mergeCourse(coursesMap, { course_id: payload.course_id, course_name: payload.course_name });
-            const course = coursesMap.get(payload.course_id);
-            if (course) {
-                course.total_visits += 1;
-                course.last_access_time = new Date(timestamp).toISOString();
-                if (payload.page_type === "assignment") {
-                    course.number_of_assignments_viewed += 1;
-                } else if (payload.page_type === "quiz") {
-                    course.number_of_quizzes_viewed += 1;
-                } else if (payload.page_type === "resource") {
-                    course.number_of_resources_clicked += 1;
-                }
-                coursesMap.set(payload.course_id, course);
-            }
-            data.courses = Array.from(coursesMap.values());
+            const courseMetrics = ensureCourseMetrics(data, payload.course_id, payload.course_name);
 
-            updateSessionMetrics(data, timestamp, false);
-            updateActiveDayAndHours(data, timestamp);
+            if (courseMetrics) {
+                courseMetrics.total_visits += 1;
+                courseMetrics.last_access_time = new Date(timestamp).toISOString();
+                markActiveDay(courseMetrics, timestamp);
+            }
+
             addEvent(data, {
                 timestamp,
                 course_id: payload.course_id,
@@ -277,17 +217,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "interaction") {
         (async () => {
-            const payload = message.payload;
+            const payload = message.payload || {};
             const timestamp = payload.timestamp || Date.now();
             const data = await getStoredData();
+            const courseMetrics = ensureCourseMetrics(data, payload.course_id, payload.course_name);
 
-            updateSessionMetrics(data, timestamp, payload.action_type === "click");
-            updateActiveDayAndHours(data, timestamp);
+            if (courseMetrics) {
+                if (payload.action_type === "material_click") {
+                    courseMetrics.material_clicks += 1;
+                }
+                markActiveDay(courseMetrics, timestamp);
+            }
+
             addEvent(data, {
                 timestamp,
                 course_id: payload.course_id,
                 page_type: payload.page_type,
-                action_type: payload.action_type
+                action_type: payload.action_type || "interaction"
             });
 
             await saveStoredData(data);
@@ -312,18 +258,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "grades") {
         (async () => {
+            const payload = Array.isArray(message.payload) ? message.payload : [];
             const data = await getStoredData();
-            mergeGrades(data, message.payload || []);
+            const byCourse = {};
+
+            payload.forEach((grade) => {
+                if (!grade?.course_id) return;
+                byCourse[grade.course_id] = byCourse[grade.course_id] || [];
+                byCourse[grade.course_id].push(grade);
+            });
+
+            Object.entries(byCourse).forEach(([courseId, items]) => {
+                const courseMetrics = ensureCourseMetrics(data, courseId, items[0]?.course_name);
+                if (!courseMetrics) return;
+                const { quizAttempts, assignmentSubmissions } = extractAttemptsFromGrades(items);
+                if (quizAttempts > 0) {
+                    courseMetrics.quiz_attempts = Math.max(courseMetrics.quiz_attempts, quizAttempts);
+                }
+                if (assignmentSubmissions > 0) {
+                    courseMetrics.assignment_submissions = Math.max(courseMetrics.assignment_submissions, assignmentSubmissions);
+                }
+            });
+
             await saveStoredData(data);
             sendResponse({ status: "ok" });
         })();
         return true;
     }
 
-    if (message.type === "materials") {
+    if (message.type === "metrics_update") {
         (async () => {
+            const payload = message.payload || {};
             const data = await getStoredData();
-            mergeMaterials(data, message.payload || []);
+            const courseMetrics = ensureCourseMetrics(data, payload.course_id, payload.course_name);
+
+            if (courseMetrics) {
+                if (Number.isFinite(payload.quiz_attempts)) {
+                    courseMetrics.quiz_attempts = Math.max(courseMetrics.quiz_attempts, payload.quiz_attempts);
+                }
+                if (Number.isFinite(payload.assignment_submissions)) {
+                    courseMetrics.assignment_submissions = Math.max(courseMetrics.assignment_submissions, payload.assignment_submissions);
+                }
+                if (payload.timestamp) {
+                    markActiveDay(courseMetrics, payload.timestamp);
+                }
+            }
+
             await saveStoredData(data);
             sendResponse({ status: "ok" });
         })();

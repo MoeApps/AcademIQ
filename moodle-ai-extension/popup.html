@@ -3,42 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AcademIQ Materials Dashboard</title>
+<title>AcademIQ Extracted Data</title>
 <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <main class="container">
-    <header>
-      <h1>Learning Materials</h1>
+    <header class="header">
+      <h1>Extracted Data</h1>
       <p id="lastUpdated" class="subtle">No extraction data yet</p>
     </header>
 
+    <section class="card controls">
+      <label for="courseSelect">Course</label>
+      <select id="courseSelect"></select>
+    </section>
+
     <section id="emptyState" class="card empty hidden">
-      <p>No learning materials found yet. Open Moodle course pages first.</p>
+      <p>No course behavior data found yet. Open Moodle course pages first.</p>
     </section>
 
     <section id="dashboard" class="hidden">
-      <div class="stats-grid" id="materialStats"></div>
-
-      <section class="card">
-        <h2>By Course</h2>
-        <div id="courseBreakdown"></div>
-      </section>
-
-      <section class="card">
-        <div class="row">
-          <h2>Materials</h2>
-          <button id="downloadAllPdfsBtn" class="primary" type="button">Download All Files</button>
-        </div>
-        <p id="downloadMeta" class="subtle">Download-ready files: 0</p>
-        <div id="materialsList" class="materials-list"></div>
-      </section>
+      <div class="stats-grid" id="metricsGrid"></div>
     </section>
 
     <section class="card actions">
       <button id="refreshBtn" type="button">Refresh</button>
       <button id="downloadJsonBtn" type="button">Download JSON</button>
-      <button id="clearDataBtn" type="button" class="danger">Clear Data</button>
+      <button id="clearDataBtn" type="button" class="danger">Clear Selected Course</button>
     </section>
   </main>
 
