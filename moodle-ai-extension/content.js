@@ -2,6 +2,11 @@
 (() => {
     const STORAGE_ID_KEY = "moodle_student_id";
 
+    if (window.__moodleAiExtensionInitialized) {
+        return;
+    }
+    window.__moodleAiExtensionInitialized = true;
+
     const isMoodlePage = () => {
         if (!document?.body) return false;
         const metaGenerator = document.querySelector('meta[name="generator"]')?.getAttribute("content") || "";
@@ -50,15 +55,28 @@
     };
 
     const parseCourseId = (url) => {
-        const match = url.match(/[?&]id=(\d+)/);
+        const match = url.match(/[?&]courseid=(\d+)/i) || url.match(/[?&]id=(\d+)/);
         if (match) return match[1];
-        const bodyMatch = document.body.className.match(/course-(\d+)/);
-        return bodyMatch?.[1] || null;
+
+        const bodyMatch = document.body.className.match(/\bcourse-(\d+)\b/);
+        if (bodyMatch?.[1]) return bodyMatch[1];
+
+        const linkCandidates = [
+            ...document.querySelectorAll('a[href*="course/view.php?id="]'),
+            ...document.querySelectorAll('a[href*="/course/edit.php?id="]')
+        ];
+        for (const candidate of linkCandidates) {
+            const linkMatch = candidate.href.match(/[?&]id=(\d+)/);
+            if (linkMatch?.[1]) return linkMatch[1];
+        }
+
+        const pageCourseId = document.body?.dataset?.courseid || document.documentElement?.dataset?.courseid;
+        return pageCourseId || null;
     };
 
     const getCourseContext = () => {
         const url = window.location.href;
-        const courseId = parseCourseId(url) || document.querySelector('a[href*="course/view.php?id="]')?.href?.match(/[?&]id=(\d+)/)?.[1];
+        const courseId = parseCourseId(url);
         const courseName =
             document.querySelector("h1")?.textContent?.trim() ||
             document.querySelector(".page-header-headings h1")?.textContent?.trim() ||
@@ -125,14 +143,15 @@
             });
             const contentType = response.headers.get("content-type") || "";
             const disposition = response.headers.get("content-disposition") || "";
-            const nameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
-            const filename = decodeURIComponent((nameMatch?.[1] || nameMatch?.[2] || "").trim());
+            const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+            const filename = filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1].replace(/"/g, "").trim()) : null;
             return {
                 contentType,
                 contentDisposition: disposition,
-                filename: filename || null
+                filename,
+                finalUrl: response.url || url
             };
-        } catch (_) {
+        } catch (_error) {
             return {};
         }
     };
@@ -223,12 +242,14 @@
             let contentType = null;
             let contentDisposition = null;
             let filename = null;
+            let resolvedUrl = url;
 
             if (needsHeadProbe(url, fileType)) {
                 const headMetadata = await fetchHeadMetadata(url);
                 contentType = headMetadata.contentType || null;
                 contentDisposition = headMetadata.contentDisposition || null;
                 filename = headMetadata.filename || null;
+                resolvedUrl = headMetadata.finalUrl || url;
                 fileType = fileType || mapMimeTypeToFileType(contentType) || null;
             }
 
@@ -262,6 +283,7 @@
                 downloadable,
                 original_filename: filename,
                 content_type: contentType,
+                resolvedUrl,
                 due_date: parseDueDate(activity),
                 availability_status: parseAvailabilityStatus(activity),
                 semantic_tags: inferSemanticTags({ title, sectionName: parseSectionName(activity), materialType }),
@@ -309,7 +331,6 @@
     const extractAssignmentDetails = (courseId) => {
         const title = cleanText(document.querySelector("h1")?.textContent);
         const status = cleanText(document.querySelector(".submissionstatustable")?.textContent);
-        const dueDate = cleanText(document.querySelector(".submissionstatustable .duedate")?.textContent);
         const grade = cleanText(document.querySelector(".gradingtable .grade")?.textContent);
         return title
             ? [
@@ -351,12 +372,39 @@
         chrome.runtime.sendMessage({ type, payload }, () => {});
     };
 
+    const getNavigationType = () => {
+        const nav = performance.getEntriesByType("navigation")[0];
+        return nav?.type || "navigate";
+    };
+
+    const getPageSignals = () => {
+        const url = window.location.href;
+        const pageText = `${document.body?.innerText || ""} ${url}`.toLowerCase();
+        const isAssignmentSubmission =
+            /\/mod\/assign\/view\.php/i.test(url) &&
+            (/submitted for grading|submission status|submission statement|submitted/i.test(pageText) ||
+                document.querySelector('form[action*="assign"] button[name="submitbutton"]'));
+
+        const isQuizAttempt =
+            /\/mod\/quiz\/(attempt|review|summary|view)\.php/i.test(url) &&
+            (/attempt|review|finished|quiz navigation|state: finished/i.test(pageText) ||
+                document.querySelector(".quizattempt, .quizsummaryofattempt, .qn_buttons"));
+
+        return {
+            assignment_submission: Boolean(isAssignmentSubmission),
+            quiz_attempt: Boolean(isQuizAttempt)
+        };
+    };
+
     const sendPageView = (pageType, course) => {
+        const navType = getNavigationType();
         sendMessage("page_view", {
             page_type: pageType,
             course_id: course.course_id,
             course_name: course.course_name,
             url: window.location.href,
+            navigation_type: navType,
+            ...getPageSignals(),
             timestamp: Date.now()
         });
     };
@@ -397,20 +445,51 @@
         }
     };
 
-    document.addEventListener("click", () => {
-        const pageType = detectPageType();
-        const course = getCourseContext();
-        sendMessage("interaction", {
-            page_type: pageType,
-            course_id: course.course_id,
-            action_type: "click",
-            timestamp: Date.now()
-        });
-    });
+    const classifyClickAction = (target) => {
+        const link = target.closest("a");
+        if (!link) return "click";
+
+        const href = link.href || "";
+        if (/\/mod\/resource\//i.test(href) || /pluginfile\.php/i.test(href) || /\/mod\/(page|url)\//i.test(href)) {
+            return "material_click";
+        }
+        if (/\/mod\/assign\//i.test(href)) {
+            return "assignment_view";
+        }
+        if (/\/mod\/quiz\//i.test(href)) {
+            return "quiz_view";
+        }
+        return "click";
+    };
+
+    document.addEventListener(
+        "click",
+        (event) => {
+            const pageType = detectPageType();
+            const course = getCourseContext();
+            const action = classifyClickAction(event.target);
+            sendMessage("interaction", {
+                page_type: pageType,
+                course_id: course.course_id,
+                action_type: action,
+                url: window.location.href,
+                timestamp: Date.now()
+            });
+        },
+        { passive: true }
+    );
 
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
             sendMessage("page_hidden", { timestamp: Date.now() });
+        } else if (document.visibilityState === "visible") {
+            const course = getCourseContext();
+            sendMessage("page_visible", {
+                course_id: course.course_id,
+                course_name: course.course_name,
+                page_type: detectPageType(),
+                timestamp: Date.now()
+            });
         }
     });
 
@@ -418,11 +497,14 @@
         sendMessage("page_hidden", { timestamp: Date.now() });
     });
 
-    const observer = new MutationObserver(() => handleScrape());
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    window.addEventListener("load", () => {
+    const bootstrap = () => {
         handleScrape();
         setTimeout(handleScrape, 1200);
-    });
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bootstrap, { once: true });
+    } else {
+        bootstrap();
+    }
 })();
