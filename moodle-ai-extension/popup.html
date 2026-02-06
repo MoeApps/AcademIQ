@@ -2,21 +2,45 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Moodle AI Data</title>
-<style>
-  body { font-family: Arial, sans-serif; width: 350px; padding: 10px; }
-  h2 { font-size: 18px; margin-bottom: 8px; }
-  button { margin: 5px 0; padding: 6px 10px; cursor: pointer; }
-  #output { margin-top: 10px; max-height: 300px; overflow: auto; background: #f3f3f3; padding: 5px; border: 1px solid #ccc; font-size: 12px; white-space: pre-wrap; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AcademIQ Materials Dashboard</title>
+<link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h2>Moodle Data Collected</h2>
-  <button id="loadDataBtn">Load Stored Data</button>
-  <button id="downloadJsonBtn">Download JSON</button>
-  <button id="clearDataBtn">Clear Data</button>
+  <main class="container">
+    <header>
+      <h1>Learning Materials</h1>
+      <p id="lastUpdated" class="subtle">No extraction data yet</p>
+    </header>
 
-  <div id="output">Data will appear here...</div>
+    <section id="emptyState" class="card empty hidden">
+      <p>No learning materials found yet. Open Moodle course pages first.</p>
+    </section>
+
+    <section id="dashboard" class="hidden">
+      <div class="stats-grid" id="materialStats"></div>
+
+      <section class="card">
+        <h2>By Course</h2>
+        <div id="courseBreakdown"></div>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <h2>Materials</h2>
+          <button id="downloadAllPdfsBtn" class="primary" type="button">Download All Files</button>
+        </div>
+        <p id="downloadMeta" class="subtle">Download-ready files: 0</p>
+        <div id="materialsList" class="materials-list"></div>
+      </section>
+    </section>
+
+    <section class="card actions">
+      <button id="refreshBtn" type="button">Refresh</button>
+      <button id="downloadJsonBtn" type="button">Download JSON</button>
+      <button id="clearDataBtn" type="button" class="danger">Clear Data</button>
+    </section>
+  </main>
 
   <script src="popup.js"></script>
 </body>
