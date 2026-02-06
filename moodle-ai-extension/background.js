@@ -2,6 +2,8 @@ const STORAGE_KEY = "moodleData";
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 const activeTabs = new Map();
+const pageViewsByTab = new Map();
+let storageWriteQueue = Promise.resolve();
 
 const defaultData = () => ({
     student: {
@@ -60,6 +62,15 @@ const getStoredData = async () => {
 
 const saveStoredData = async (data) => {
     await chrome.storage.local.set({ [STORAGE_KEY]: data });
+};
+
+const queueStorageUpdate = (updater) => {
+    storageWriteQueue = storageWriteQueue.then(async () => {
+        const data = await getStoredData();
+        await updater(data);
+        await saveStoredData(data);
+    });
+    return storageWriteQueue;
 };
 
 const toCourseMap = (courses) => {
@@ -162,22 +173,24 @@ const addEvent = (data, event) => {
 const mergeGrades = (data, grades) => {
     grades.forEach((grade) => {
         const key = `${grade.course_id}-${grade.item_name}-${grade.item_type}-${grade.submission_time || ""}`;
-        if (!data.grades.some((existing) => existing._key === key)) {
+        const isNewGrade = !data.grades.some((existing) => existing._key === key);
+        if (isNewGrade) {
             data.grades.push({ ...grade, _key: key });
         }
 
         if (!grade.course_id || !data.metricsByCourse[grade.course_id]) return;
         const courseMetrics = data.metricsByCourse[grade.course_id];
         const itemType = (grade.item_type || "").toLowerCase();
+        if (!isNewGrade) return;
 
         if (itemType.includes("quiz")) {
-            courseMetrics.quiz_attempts += 1;
+            incrementCourseMetric(courseMetrics, "quiz_attempts", grade.course_id, "grades_merge");
         }
 
         if (itemType.includes("assignment")) {
             const isSubmitted = /submitted|submitted for grading|graded|done/i.test(grade.submission_status || "");
             if (isSubmitted) {
-                courseMetrics.assignment_submissions += 1;
+                incrementCourseMetric(courseMetrics, "assignment_submissions", grade.course_id, "grades_merge");
             }
         }
     });
@@ -250,24 +263,44 @@ const finalizeActiveTab = async (tabId, endTime) => {
         activeTabs.delete(tabId);
         return;
     }
-    const data = await getStoredData();
-    const coursesMap = toCourseMap(data.courses);
-    mergeCourse(data, coursesMap, { course_id: active.courseId, course_name: active.courseName });
+    await queueStorageUpdate(async (data) => {
+        const coursesMap = toCourseMap(data.courses);
+        mergeCourse(data, coursesMap, { course_id: active.courseId, course_name: active.courseName });
 
-    const course = coursesMap.get(active.courseId);
-    if (course) {
-        course.total_time_spent_seconds += Math.round(durationMs / 1000);
-        course.last_access_time = new Date(endTime).toISOString();
-        coursesMap.set(active.courseId, course);
-    }
+        const course = coursesMap.get(active.courseId);
+        if (course) {
+            course.total_time_spent_seconds += Math.round(durationMs / 1000);
+            course.last_access_time = new Date(endTime).toISOString();
+            coursesMap.set(active.courseId, course);
+            console.log(`[moodle-ai] metric increment total_time_spent_seconds +${Math.round(durationMs / 1000)} course=${active.courseId} source=tab_hidden`);
+        }
 
-    data.behavior.total_time_spent_on_moodle += Math.round(durationMs / 1000);
-    updateSessionMetrics(data, endTime, false);
-    updateActiveDayAndHours(data, endTime);
+        data.behavior.total_time_spent_on_moodle += Math.round(durationMs / 1000);
+        updateSessionMetrics(data, endTime, false);
+        updateActiveDayAndHours(data, endTime);
 
-    syncMetricsByCourse(data, coursesMap);
-    await saveStoredData(data);
+        syncMetricsByCourse(data, coursesMap);
+    });
     activeTabs.delete(tabId);
+};
+
+const shouldCountVisit = (tabId, payload) => {
+    if (typeof tabId !== "number" || !payload?.course_id) return false;
+    if (payload.navigation_type === "reload") return false;
+
+    const previous = pageViewsByTab.get(tabId);
+    const key = `${payload.course_id}-${payload.url || ""}`;
+    if (previous?.key === key) {
+        return false;
+    }
+    pageViewsByTab.set(tabId, { key, timestamp: payload.timestamp || Date.now() });
+    return true;
+};
+
+const incrementCourseMetric = (course, metricName, courseId, source) => {
+    if (!course || typeof course[metricName] !== "number") return;
+    course[metricName] += 1;
+    console.log(`[moodle-ai] metric increment ${metricName} +1 course=${courseId} source=${source}`);
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -291,44 +324,53 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (async () => {
             const payload = message.payload;
             const timestamp = payload.timestamp || Date.now();
+            const countVisit = shouldCountVisit(tabId, payload);
             if (typeof tabId === "number") {
                 await finalizeActiveTab(tabId, timestamp);
-                activeTabs.set(tabId, {
-                    startTime: timestamp,
-                    courseId: payload.course_id,
-                    courseName: payload.course_name,
-                    pageType: payload.page_type
-                });
-            }
-
-            const data = await getStoredData();
-            const coursesMap = toCourseMap(data.courses);
-            mergeCourse(data, coursesMap, { course_id: payload.course_id, course_name: payload.course_name });
-            const course = coursesMap.get(payload.course_id);
-            if (course) {
-                course.total_visits += 1;
-                course.last_access_time = new Date(timestamp).toISOString();
-                if (payload.page_type === "assignment") {
-                    course.number_of_assignments_viewed += 1;
-                } else if (payload.page_type === "quiz") {
-                    course.number_of_quizzes_viewed += 1;
-                } else if (payload.page_type === "resource") {
-                    course.number_of_resources_clicked += 1;
+                if (payload.course_id) {
+                    activeTabs.set(tabId, {
+                        startTime: timestamp,
+                        courseId: payload.course_id,
+                        courseName: payload.course_name,
+                        pageType: payload.page_type
+                    });
                 }
-                coursesMap.set(payload.course_id, course);
             }
 
-            updateSessionMetrics(data, timestamp, false);
-            updateActiveDayAndHours(data, timestamp);
-            addEvent(data, {
-                timestamp,
-                course_id: payload.course_id,
-                page_type: payload.page_type,
-                action_type: "view"
-            });
+            await queueStorageUpdate(async (data) => {
+                const coursesMap = toCourseMap(data.courses);
+                mergeCourse(data, coursesMap, { course_id: payload.course_id, course_name: payload.course_name });
+                const course = coursesMap.get(payload.course_id);
+                if (course) {
+                    if (countVisit) {
+                        incrementCourseMetric(course, "total_visits", payload.course_id, `navigation:${payload.navigation_type || "navigate"}`);
+                    }
+                    course.last_access_time = new Date(timestamp).toISOString();
+                    if (payload.page_type === "assignment") {
+                        incrementCourseMetric(course, "number_of_assignments_viewed", payload.course_id, "page_view");
+                    } else if (payload.page_type === "quiz") {
+                        incrementCourseMetric(course, "number_of_quizzes_viewed", payload.course_id, "page_view");
+                    }
+                    if (payload.assignment_submission) {
+                        incrementCourseMetric(course, "assignment_submissions", payload.course_id, "assignment_submission_detected");
+                    }
+                    if (payload.quiz_attempt) {
+                        incrementCourseMetric(course, "quiz_attempts", payload.course_id, "quiz_attempt_detected");
+                    }
+                    coursesMap.set(payload.course_id, course);
+                }
 
-            syncMetricsByCourse(data, coursesMap);
-            await saveStoredData(data);
+                updateSessionMetrics(data, timestamp, false);
+                updateActiveDayAndHours(data, timestamp);
+                addEvent(data, {
+                    timestamp,
+                    course_id: payload.course_id,
+                    page_type: payload.page_type,
+                    action_type: "view"
+                });
+
+                syncMetricsByCourse(data, coursesMap);
+            });
             sendResponse({ status: "ok" });
         })();
         return true;
@@ -349,22 +391,53 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (async () => {
             const payload = message.payload;
             const timestamp = payload.timestamp || Date.now();
-            const data = await getStoredData();
+            await queueStorageUpdate(async (data) => {
+                const coursesMap = toCourseMap(data.courses);
+                mergeCourse(data, coursesMap, { course_id: payload.course_id, course_name: null });
+                const course = payload.course_id ? coursesMap.get(payload.course_id) : null;
 
-            updateSessionMetrics(data, timestamp, payload.action_type === "click");
-            updateActiveDayAndHours(data, timestamp);
-            addEvent(data, {
-                timestamp,
-                course_id: payload.course_id,
-                page_type: payload.page_type,
-                action_type: payload.action_type
+                updateSessionMetrics(data, timestamp, true);
+                updateActiveDayAndHours(data, timestamp);
+                addEvent(data, {
+                    timestamp,
+                    course_id: payload.course_id,
+                    page_type: payload.page_type,
+                    action_type: payload.action_type
+                });
+
+                if (course) {
+                    incrementCourseMetric(course, "click_count", payload.course_id, payload.action_type || "interaction");
+                    if (payload.action_type === "material_click") {
+                        incrementCourseMetric(course, "number_of_resources_clicked", payload.course_id, "click");
+                    }
+                    if (payload.action_type === "assignment_view") {
+                        incrementCourseMetric(course, "number_of_assignments_viewed", payload.course_id, "click");
+                    }
+                    if (payload.action_type === "quiz_view") {
+                        incrementCourseMetric(course, "number_of_quizzes_viewed", payload.course_id, "click");
+                    }
+                    coursesMap.set(payload.course_id, course);
+                }
+
+                syncMetricsByCourse(data, coursesMap);
             });
+            sendResponse({ status: "ok" });
+        })();
+        return true;
+    }
 
-            if (payload.course_id && data.metricsByCourse[payload.course_id] && payload.action_type === "click") {
-                data.metricsByCourse[payload.course_id].click_count += 1;
+    if (message.type === "page_visible") {
+        (async () => {
+            const payload = message.payload || {};
+            const timestamp = payload.timestamp || Date.now();
+            if (typeof tabId === "number" && payload.course_id) {
+                activeTabs.set(tabId, {
+                    startTime: timestamp,
+                    courseId: payload.course_id,
+                    courseName: payload.course_name,
+                    pageType: payload.page_type
+                });
             }
-
-            await saveStoredData(data);
             sendResponse({ status: "ok" });
         })();
         return true;
@@ -372,13 +445,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "identity") {
         (async () => {
-            const data = await getStoredData();
-            data.student = {
-                student_id: message.payload.student_id || data.student.student_id,
-                program: message.payload.program || data.student.program,
-                enrollment_year: message.payload.enrollment_year || data.student.enrollment_year
-            };
-            await saveStoredData(data);
+            await queueStorageUpdate(async (data) => {
+                data.student = {
+                    student_id: message.payload.student_id || data.student.student_id,
+                    program: message.payload.program || data.student.program,
+                    enrollment_year: message.payload.enrollment_year || data.student.enrollment_year
+                };
+            });
             sendResponse({ status: "ok" });
         })();
         return true;
@@ -386,9 +459,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "grades") {
         (async () => {
-            const data = await getStoredData();
-            mergeGrades(data, message.payload || []);
-            await saveStoredData(data);
+            await queueStorageUpdate(async (data) => {
+                mergeGrades(data, message.payload || []);
+            });
             sendResponse({ status: "ok" });
         })();
         return true;
@@ -396,9 +469,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "materials") {
         (async () => {
-            const data = await getStoredData();
-            mergeMaterials(data, message.payload || []);
-            await saveStoredData(data);
+            await queueStorageUpdate(async (data) => {
+                mergeMaterials(data, message.payload || []);
+            });
             sendResponse({ status: "ok" });
         })();
         return true;
@@ -409,4 +482,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
     finalizeActiveTab(tabId, Date.now());
+    pageViewsByTab.delete(tabId);
 });
