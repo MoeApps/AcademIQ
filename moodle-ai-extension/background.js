@@ -21,6 +21,7 @@ const defaultData = () => ({
     events: [],
     grades: [],
     learning_materials: [],
+    knowledge_base: {},
     _meta: {
         activeDays: [],
         hourCounts: {},
@@ -138,6 +139,27 @@ const mergeGrades = (data, grades) => {
     });
 };
 
+
+const buildKnowledgeBase = (materials = []) => {
+    const knowledgeBase = {};
+
+    materials.forEach((material) => {
+        const courseName = material.course_name || `Course ${material.course_id || "Unknown"}`;
+        if (!knowledgeBase[courseName]) {
+            knowledgeBase[courseName] = {};
+        }
+
+        const tags = Array.isArray(material.semantic_tags) && material.semantic_tags.length ? material.semantic_tags : ["general"];
+        tags.forEach((tag) => {
+            if (!knowledgeBase[courseName][tag]) {
+                knowledgeBase[courseName][tag] = [];
+            }
+            knowledgeBase[courseName][tag].push(material);
+        });
+    });
+
+    return knowledgeBase;
+};
 const mergeMaterials = (data, materials) => {
     materials.forEach((material) => {
         const stableMaterialId = material.material_id || material.url || material.title || "unknown";
@@ -146,6 +168,8 @@ const mergeMaterials = (data, materials) => {
             data.learning_materials.push({ ...material, _key: key });
         }
     });
+
+    data.knowledge_base = buildKnowledgeBase(data.learning_materials);
 };
 
 const finalizeActiveTab = async (tabId, endTime) => {
