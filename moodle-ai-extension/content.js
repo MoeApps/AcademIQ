@@ -50,10 +50,15 @@
     };
 
     const parseCourseId = (url) => {
-        const match = url.match(/[?&]id=(\d+)/);
-        if (match) return match[1];
         const bodyMatch = document.body.className.match(/course-(\d+)/);
-        return bodyMatch?.[1] || null;
+        if (bodyMatch?.[1]) return bodyMatch[1];
+
+        const courseLinkMatch = document.querySelector('a[href*="course/view.php?id="]')?.href?.match(/[?&]id=(\d+)/);
+        if (courseLinkMatch?.[1]) return courseLinkMatch[1];
+
+        const isCoursePage = /\/course\/view\.php/i.test(url || "");
+        const match = isCoursePage ? url.match(/[?&]id=(\d+)/) : null;
+        return match?.[1] || null;
     };
 
     const getCourseContext = () => {
@@ -416,6 +421,19 @@
 
     window.addEventListener("beforeunload", () => {
         sendMessage("page_hidden", { timestamp: Date.now() });
+    });
+
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        if (message?.type === "get_course_context") {
+            const course = getCourseContext();
+            sendResponse({
+                courseId: course.course_id,
+                courseName: course.course_name,
+                url: window.location.href
+            });
+            return true;
+        }
+        return false;
     });
 
     const observer = new MutationObserver(() => handleScrape());

@@ -16,6 +16,7 @@ const refs = {
 
 let currentData = null;
 let currentCourseId = null;
+let coursesById = {};
 
 const sanitizePayload = (data) => {
     if (!data) return null;
@@ -185,17 +186,52 @@ const renderMaterialsList = (materials) => {
     });
 };
 
-const renderCourseSelector = (courseIds) => {
+const upsertCourse = (courseId, metadata = {}) => {
+    if (!courseId) return;
+    const existing = coursesById[courseId] || { id: courseId, name: `Course ${courseId}`, url: "" };
+    coursesById[courseId] = {
+        ...existing,
+        id: courseId,
+        name: metadata.name || existing.name,
+        url: metadata.url || existing.url
+    };
+};
+
+const rebuildCoursesById = (data) => {
+    coursesById = {};
+
+    Object.entries(data?.metricsByCourse || {}).forEach(([courseId, metrics]) => {
+        upsertCourse(courseId, { name: metrics?.course_name });
+    });
+
+    (data?.courses || []).forEach((course) => {
+        const courseId = course?.course_id || course?.id;
+        upsertCourse(courseId, { name: course?.course_name || course?.name, url: course?.url });
+    });
+
+    Object.entries(data?.materialsByCourse || {}).forEach(([courseId, materials]) => {
+        const firstWithMeta = (materials || []).find((material) => material?.course_name || material?.sourcePage);
+        upsertCourse(courseId, {
+            name: firstWithMeta?.course_name,
+            url: firstWithMeta?.sourcePage
+        });
+    });
+};
+
+const getCourseIds = () => Object.keys(coursesById);
+
+const renderCourseSelector = () => {
+    const courseIds = getCourseIds();
     refs.courseSelector.innerHTML = "";
+
     courseIds.forEach((courseId) => {
-        const metrics = currentData.metricsByCourse?.[courseId] || {};
         const option = document.createElement("option");
         option.value = courseId;
-        option.textContent = metrics.course_name || `Course ${courseId}`;
+        option.textContent = coursesById[courseId]?.name || `Course ${courseId}`;
         refs.courseSelector.appendChild(option);
     });
 
-    if (!currentCourseId || !courseIds.includes(currentCourseId)) {
+    if (!currentCourseId || !coursesById[currentCourseId]) {
         currentCourseId = courseIds[0] || null;
     }
 
@@ -204,7 +240,7 @@ const renderCourseSelector = (courseIds) => {
 
 const renderDashboard = () => {
     const data = currentData;
-    const courseIds = Object.keys(data?.metricsByCourse || {});
+    const courseIds = getCourseIds();
     const isEmpty = courseIds.length === 0;
 
     refs.lastUpdated.textContent = `Last refreshed: ${new Date().toLocaleString()}`;
@@ -216,7 +252,7 @@ const renderDashboard = () => {
         return;
     }
 
-    renderCourseSelector(courseIds);
+    renderCourseSelector();
 
     const metrics = data.metricsByCourse?.[currentCourseId] || {};
     metrics.active_days_count = data.behavior?.active_days_count || metrics.active_days_count || 0;
@@ -229,8 +265,45 @@ const renderDashboard = () => {
     renderMaterialsList(courseMaterials);
 };
 
+const resolveActiveCourseContext = async () => {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!activeTab?.id) return null;
+
+    try {
+        const response = await chrome.tabs.sendMessage(activeTab.id, { type: "get_course_context" });
+        const courseId = response?.courseId || response?.course_id || null;
+        if (!courseId) return null;
+
+        upsertCourse(courseId, {
+            name: response?.courseName || response?.course_name,
+            url: response?.url
+        });
+
+        return { courseId };
+    } catch (error) {
+        return null;
+    }
+};
+
+const syncActiveCourseSelection = async ({ rerender = true } = {}) => {
+    const context = await resolveActiveCourseContext();
+    if (!context?.courseId || !coursesById[context.courseId]) return;
+
+    if (currentCourseId !== context.courseId) {
+        currentCourseId = context.courseId;
+    }
+
+    if (rerender) {
+        renderDashboard();
+    } else {
+        refs.courseSelector.value = currentCourseId;
+    }
+};
+
 const refreshData = async () => {
     currentData = await getStorageData();
+    rebuildCoursesById(currentData);
+    await syncActiveCourseSelection({ rerender: false });
     renderDashboard();
 };
 
@@ -269,10 +342,19 @@ refs.clearDataBtn.addEventListener("click", () => {
     chrome.runtime.sendMessage({ type: "clear_data" }, () => {
         currentData = null;
         currentCourseId = null;
+        coursesById = {};
         renderDashboard();
         refs.lastUpdated.textContent = "Data cleared";
     });
 });
 
 refs.refreshBtn.addEventListener("click", refreshData);
+chrome.tabs.onActivated.addListener(() => {
+    syncActiveCourseSelection();
+});
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.status === "complete" || changeInfo.url) {
+        syncActiveCourseSelection();
+    }
+});
 document.addEventListener("DOMContentLoaded", refreshData);
