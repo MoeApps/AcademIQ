@@ -3,6 +3,9 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 const activeTabs = new Map();
 
+const normalizeCourseName = (name) => (name || "").replace(/\s+/g, " ").trim().toLowerCase();
+const getCourseKey = (course) => course?.course_id || normalizeCourseName(course?.course_name) || null;
+
 const defaultData = () => ({
     student: {
         student_id: null,
@@ -65,33 +68,37 @@ const saveStoredData = async (data) => {
 const toCourseMap = (courses) => {
     const map = new Map();
     courses.forEach((course) => {
-        if (course.course_id) {
-            map.set(course.course_id, { ...course });
+        const courseKey = getCourseKey(course);
+        if (courseKey) {
+            map.set(courseKey, { ...course, _courseKey: courseKey });
         }
     });
     return map;
 };
 
 const mergeCourse = (data, coursesMap, course) => {
-    if (!course?.course_id) return;
+    const courseKey = getCourseKey(course);
+    if (!courseKey) return;
 
-    const existing = coursesMap.get(course.course_id);
+    const existing = coursesMap.get(courseKey);
     if (!existing) {
-        coursesMap.set(course.course_id, createDefaultCourseMetrics(course));
+        const mergedCourse = createDefaultCourseMetrics({ ...course, course_id: course.course_id || courseKey });
+        coursesMap.set(courseKey, { ...mergedCourse, _courseKey: courseKey });
     } else if (course.course_name && existing.course_name !== course.course_name) {
         existing.course_name = course.course_name;
-        coursesMap.set(course.course_id, existing);
+        coursesMap.set(courseKey, existing);
     }
 
-    if (!data.metricsByCourse[course.course_id]) {
-        data.metricsByCourse[course.course_id] = createDefaultCourseMetrics(course);
+    const metricsId = course.course_id || courseKey;
+    if (!data.metricsByCourse[metricsId]) {
+        data.metricsByCourse[metricsId] = createDefaultCourseMetrics({ ...course, course_id: metricsId });
     } else if (course.course_name) {
-        data.metricsByCourse[course.course_id].course_name = course.course_name;
+        data.metricsByCourse[metricsId].course_name = course.course_name;
     }
 };
 
 const syncMetricsByCourse = (data, coursesMap) => {
-    data.courses = Array.from(coursesMap.values());
+    data.courses = Array.from(coursesMap.values()).map(({ _courseKey, ...course }) => course);
     data.courses.forEach((course) => {
         if (course.course_id) {
             data.metricsByCourse[course.course_id] = { ...course };
@@ -245,6 +252,10 @@ const mergeMaterials = (data, materials) => {
 const finalizeActiveTab = async (tabId, endTime) => {
     const active = activeTabs.get(tabId);
     if (!active) return;
+    if (!active.courseId) {
+        activeTabs.delete(tabId);
+        return;
+    }
     const durationMs = Math.max(0, endTime - active.startTime);
     if (durationMs <= 0) {
         activeTabs.delete(tabId);
@@ -254,7 +265,7 @@ const finalizeActiveTab = async (tabId, endTime) => {
     const coursesMap = toCourseMap(data.courses);
     mergeCourse(data, coursesMap, { course_id: active.courseId, course_name: active.courseName });
 
-    const course = coursesMap.get(active.courseId);
+    const course = coursesMap.get(active.courseKey || getCourseKey({ course_id: active.courseId, course_name: active.courseName }));
     if (course) {
         course.total_time_spent_seconds += Math.round(durationMs / 1000);
         course.last_access_time = new Date(endTime).toISOString();
@@ -293,18 +304,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const timestamp = payload.timestamp || Date.now();
             if (typeof tabId === "number") {
                 await finalizeActiveTab(tabId, timestamp);
+                const courseKey = getCourseKey({ course_id: payload.course_id, course_name: payload.course_name });
                 activeTabs.set(tabId, {
                     startTime: timestamp,
                     courseId: payload.course_id,
                     courseName: payload.course_name,
-                    pageType: payload.page_type
+                    pageType: payload.page_type,
+                    courseKey
                 });
             }
 
             const data = await getStoredData();
             const coursesMap = toCourseMap(data.courses);
             mergeCourse(data, coursesMap, { course_id: payload.course_id, course_name: payload.course_name });
-            const course = coursesMap.get(payload.course_id);
+            const course = coursesMap.get(getCourseKey({ course_id: payload.course_id, course_name: payload.course_name }));
             if (course) {
                 course.total_visits += 1;
                 course.last_access_time = new Date(timestamp).toISOString();
@@ -398,6 +411,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (async () => {
             const data = await getStoredData();
             mergeMaterials(data, message.payload || []);
+            await saveStoredData(data);
+            sendResponse({ status: "ok" });
+        })();
+        return true;
+    }
+
+    if (message.type === "courses_catalog") {
+        (async () => {
+            const data = await getStoredData();
+            const coursesMap = toCourseMap(data.courses);
+            (message.payload || []).forEach((course) => mergeCourse(data, coursesMap, course));
+            syncMetricsByCourse(data, coursesMap);
             await saveStoredData(data);
             sendResponse({ status: "ok" });
         })();

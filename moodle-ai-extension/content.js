@@ -1,5 +1,10 @@
 // content.js - Moodle data extraction and event tracking
 (() => {
+    if (window.__moodleAiContentInitialized) {
+        return;
+    }
+    window.__moodleAiContentInitialized = true;
+
     const STORAGE_ID_KEY = "moodle_student_id";
 
     const isMoodlePage = () => {
@@ -71,6 +76,20 @@
 
     const cleanText = (value) => value?.replace(/\s+/g, " ").trim() || null;
 
+    const DOWNLOADABLE_EXTENSIONS = ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "zip", "txt", "csv", "rtf"];
+    const isDownloadableFileUrl = (url) => {
+        if (!url) return false;
+        const cleanUrl = url.split("?")[0].toLowerCase();
+        return DOWNLOADABLE_EXTENSIONS.some((ext) => cleanUrl.endsWith(`.${ext}`));
+    };
+
+    const getFileNameFromUrl = (url) => {
+        if (!url) return null;
+        const pathname = url.split("?")[0];
+        const fileName = pathname.split("/").pop() || "";
+        return decodeURIComponent(fileName || "").trim() || null;
+    };
+
     const parseMaterialId = (url, activity) => {
         const fromUrl = url?.match(/[?&](?:id|cmid)=([^&#]+)/i)?.[1];
         if (fromUrl) return fromUrl;
@@ -110,6 +129,40 @@
         if (hint.includes("folder")) return "folder";
         if (hint.includes("book") || hint.includes("page")) return "html";
         return null;
+    };
+
+    const isFolderResource = (activity, fileType, url) => {
+        const classNames = activity?.className || "";
+        const text = `${activity?.textContent || ""} ${url || ""}`.toLowerCase();
+        return fileType === "folder" || classNames.includes("modtype_folder") || /\/mod\/folder\//i.test(url || "") || text.includes("folder");
+    };
+
+    const extractFolderFiles = async (folderUrl) => {
+        if (!folderUrl) return [];
+        try {
+            const response = await fetch(folderUrl, { credentials: "include", redirect: "follow" });
+            if (!response.ok) return [];
+            const html = await response.text();
+            const doc = new DOMParser().parseFromString(html, "text/html");
+            const anchors = Array.from(doc.querySelectorAll('a[href]'));
+
+            const files = anchors
+                .map((a) => ({
+                    url: new URL(a.getAttribute("href"), folderUrl).href,
+                    title: cleanText(a.textContent) || getFileNameFromUrl(new URL(a.getAttribute("href"), folderUrl).href)
+                }))
+                .filter((item) => /pluginfile\.php|\/mod\/resource\//i.test(item.url) || isDownloadableFileUrl(item.url))
+                .filter((item) => item.url && isDownloadableFileUrl(item.url))
+                .filter((item, index, list) => list.findIndex((x) => x.url === item.url) === index)
+                .map((item) => {
+                    const ext = (item.url.split("?")[0].match(/\.([a-z0-9]+)$/i)?.[1] || "").toLowerCase();
+                    return { ...item, fileType: ext || "unknown" };
+                });
+
+            return files;
+        } catch (_error) {
+            return [];
+        }
     };
 
     const needsHeadProbe = (url, fileType) => Boolean(url && !fileType && (/pluginfile\.php/i.test(url) || /\/mod\/resource\//i.test(url)));
@@ -238,13 +291,14 @@
             }
 
             const materialType = classifyMaterialType(activity, title, fileType, url);
-            const downloadable = evaluateDownloadability(activity, materialType, url, contentDisposition);
+            const isFolder = isFolderResource(activity, fileType, url);
+            const downloadable = !isFolder && evaluateDownloadability(activity, materialType, url, contentDisposition);
             const dedupeKey = `${course.course_id || "unknown"}-${materialId}-${url}`;
 
             if (seen.has(dedupeKey)) return null;
             seen.add(dedupeKey);
 
-            return {
+            const baseMaterial = {
                 id: materialId,
                 courseId: course.course_id,
                 title,
@@ -267,10 +321,53 @@
                 semantic_tags: inferSemanticTags({ title, sectionName: parseSectionName(activity), materialType }),
                 extracted_at: new Date().toISOString()
             };
+
+            if (!isFolder) {
+                return baseMaterial;
+            }
+
+            const folderFiles = await extractFolderFiles(url);
+            if (!folderFiles.length) {
+                return {
+                    ...baseMaterial,
+                    downloadable: false,
+                    fileType: "folder",
+                    file_type: "folder",
+                    downloadStatus: "No downloadable files"
+                };
+            }
+
+            return [
+                {
+                    ...baseMaterial,
+                    downloadable: false,
+                    fileType: "folder",
+                    file_type: "folder",
+                    downloadStatus: "Folder files extracted"
+                },
+                ...folderFiles.map((file, fileIndex) => ({
+                    ...baseMaterial,
+                    id: `${materialId}-file-${fileIndex + 1}`,
+                    material_id: `${materialId}-file-${fileIndex + 1}`,
+                    title: `${title} - ${file.title || `File ${fileIndex + 1}`}`,
+                    url: file.url,
+                    fileType: file.fileType,
+                    file_type: file.fileType,
+                    material_type: classifyMaterialType(activity, file.title || title, file.fileType, file.url),
+                    downloadable: true,
+                    original_filename: file.title || null
+                }))
+            ];
         });
 
         const resolved = await Promise.all(collected);
-        resolved.filter(Boolean).forEach((item) => materials.push(item));
+        resolved.filter(Boolean).forEach((item) => {
+            if (Array.isArray(item)) {
+                item.forEach((subItem) => materials.push(subItem));
+                return;
+            }
+            materials.push(item);
+        });
 
         return materials;
     };
@@ -351,7 +448,14 @@
         chrome.runtime.sendMessage({ type, payload }, () => {});
     };
 
+    let lastPageViewSignature = null;
+
     const sendPageView = (pageType, course) => {
+        const signature = `${pageType}|${course.course_id || "none"}|${window.location.href}`;
+        if (lastPageViewSignature === signature && document.visibilityState === "visible") {
+            return;
+        }
+        lastPageViewSignature = signature;
         sendMessage("page_view", {
             page_type: pageType,
             course_id: course.course_id,
@@ -361,12 +465,38 @@
         });
     };
 
+    const extractAvailableCourses = () => {
+        const anchors = Array.from(document.querySelectorAll('a[href*="course/view.php?id="]'));
+        const courseMap = new Map();
+
+        anchors.forEach((anchor) => {
+            const href = anchor.getAttribute("href") || "";
+            const courseId = href.match(/[?&]id=(\d+)/)?.[1] || null;
+            const courseName = cleanText(anchor.textContent);
+            if (!courseName) return;
+
+            const key = courseId || courseName.toLowerCase();
+            if (!courseMap.has(key)) {
+                courseMap.set(key, { course_id: courseId, course_name: courseName });
+            }
+        });
+
+        return Array.from(courseMap.values());
+    };
+
     const handleScrape = async () => {
         const pageType = detectPageType();
         const course = getCourseContext();
 
         sendMessage("identity", getStudentIdentity());
         sendPageView(pageType, course);
+
+        if (pageType === "dashboard") {
+            const detectedCourses = extractAvailableCourses();
+            if (detectedCourses.length) {
+                sendMessage("courses_catalog", detectedCourses);
+            }
+        }
 
         if (pageType === "course") {
             const materials = await extractMaterialsFromCourse(course);
@@ -411,7 +541,12 @@
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
             sendMessage("page_hidden", { timestamp: Date.now() });
+            return;
         }
+
+        const pageType = detectPageType();
+        const course = getCourseContext();
+        sendPageView(pageType, course);
     });
 
     window.addEventListener("beforeunload", () => {
