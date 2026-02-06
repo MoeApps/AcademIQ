@@ -2,28 +2,36 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from datetime import datetime
-import numpy as np
-import joblib
+# import numpy as np
+# import joblib
+from .database import ping_db
+from ..routes.route import router
 
 # ------------------------------------
 # Initialize FastAPI app
 # ------------------------------------
 app = FastAPI(title="academIQ Backend", version="1.0")
 
+app.include_router(router)
+
+@app.on_event("startup")
+def startup_db():
+    ping_db()
+
 # ------------------------------------
 # Load ML models & scaler
 # ------------------------------------
-try:
-    pass_fail_model = joblib.load("pass_fail_model.pkl")
-except Exception as e:
-    print(f"⚠️ Failed to load pass_fail_model.pkl: {e}")
-    pass_fail_model = None
+# try:
+#     pass_fail_model = joblib.load(r"C:\Users\khale\OneDrive\Desktop\AcademIQ\ai\Pass_Fail_Model\pass_fail_model.pkl")
+# except Exception as e:
+#     print(f"⚠️ Failed to load pass_fail_model.pkl: {e}")
+#     pass_fail_model = None
 
-try:
-    risk_model = joblib.load("backend/models/ai_model.pkl")
-except Exception as e:
-    print(f"⚠️ Failed to load ai_model.pkl: {e}")
-    risk_model = None
+# try:
+#     risk_model = joblib.load("backend/models/ai_model.pkl")
+# except Exception as e:
+#     print(f"⚠️ Failed to load ai_model.pkl: {e}")
+#     risk_model = None
 
 # ------------------------------------
 # --------- Schemas ------------------

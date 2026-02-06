@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/14zdN4MHq5224574Bs8HMgNdJqE20EyiD
 """
 
-df.columns.tolist()
+#df.columns.tolist()
 
 import pandas as pd
 import numpy as np
@@ -80,3 +80,7 @@ df["generic_recommendation"] = df["risk_level"].map(recommendations)
 print(X.shape)
 print(df[clustering_features].isnull().sum())
 
+import joblib
+
+joblib.dump(kmeans, "ai_model.pkl")
+joblib.dump(scaler, "scaler.pkl")
