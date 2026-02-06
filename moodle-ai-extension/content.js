@@ -141,15 +141,10 @@
         const classList = activity?.className || "";
         const text = `${title || ""} ${url || ""}`.toLowerCase();
 
-        if (classList.includes("assign") || text.includes("assignment")) return "assignment";
-        if (classList.includes("quiz") || text.includes("quiz")) return "quiz";
-        if (classList.includes("url") || fileType === "link") return "link";
-        if (classList.includes("folder") || text.includes("lab") || text.includes("tutorial")) return "lab";
-        if (fileType === "pdf") return "pdf";
-        if (["doc", "docx", "ppt", "pptx", "xls", "xlsx"].includes(fileType)) return "document";
-        if (classList.includes("page") || text.includes("lecture")) return "lecture";
-        if (classList.includes("resource")) return "lecture";
-        return "lecture";
+        if (classList.includes("folder") || text.includes("lab") || text.includes("tutorial") || text.includes("practical")) return "lab";
+        if (classList.includes("resource") || classList.includes("page") || text.includes("lecture") || fileType === "pdf") return "lecture";
+        if (classList.includes("url") || fileType === "link" || text.includes("resource")) return "resource";
+        return "unknown";
     };
 
     const parseSectionName = (activity) => {
@@ -250,15 +245,20 @@
             seen.add(dedupeKey);
 
             return {
+                id: materialId,
+                courseId: course.course_id,
+                title,
+                type: materialType,
+                url,
+                fileType: fileType || "unknown",
+                sourcePage: window.location.href,
                 course_id: course.course_id,
                 course_name: course.course_name,
                 section_name: parseSectionName(activity),
                 material_id: materialId,
                 material_type: materialType,
-                title,
                 file_type: fileType,
                 file_size: parseFileSize(activity),
-                url,
                 downloadable,
                 original_filename: filename,
                 content_type: contentType,
