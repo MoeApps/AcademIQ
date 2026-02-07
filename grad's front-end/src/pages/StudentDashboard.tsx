@@ -3,15 +3,16 @@ import Footer from "@/components/layout/Footer";
 import PerformanceChart from "@/components/dashboard/PerformanceChart";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { weeklyPerformanceData, getOverallStatus } from "@/data/mockData";
+import { useUser } from "@/context/UserContext";
 
 const StudentDashboard = () => {
-  // Calculate average score from weekly data
+  const { username } = useUser();
   const avgScore = weeklyPerformanceData.reduce((sum, d) => sum + d.score, 0) / weeklyPerformanceData.length;
   const overallStatus = getOverallStatus(avgScore);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <DashboardHeader username="Khaled" />
+      <DashboardHeader username={username || "Student"} />
       
       <main className="container flex-1 py-8">
         <div className="mb-8">

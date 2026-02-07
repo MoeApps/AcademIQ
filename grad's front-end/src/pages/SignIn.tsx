@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useUser } from "@/context/UserContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const SignIn = () => {
   const navigate = useNavigate();
+  const { setUsername } = useUser();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -55,20 +57,12 @@ const SignIn = () => {
     // Simulate authentication (replace with actual auth logic)
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // Demo credentials check
-    if (formData.username === "student" && formData.password === "password123") {
-      toast({
-        title: "Welcome back!",
-        description: "You have successfully signed in.",
-      });
-      navigate("/dashboard");
-    } else {
-      setErrors((prev) => ({
-        ...prev,
-        general: "Invalid username or password. Try: student / password123",
-      }));
-      setIsLoading(false);
-    }
+    setUsername(formData.username);
+    toast({
+      title: "Welcome back!",
+      description: "You have successfully signed in.",
+    });
+    navigate("/dashboard");
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

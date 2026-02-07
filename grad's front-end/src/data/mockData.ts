@@ -5,6 +5,7 @@ export interface Course {
   name: string;
   code: string;
   instructor: string;
+  chapters: string[];
 }
 
 export interface PerformanceData {
@@ -23,12 +24,12 @@ export interface CourseStats {
 }
 
 export const courses: Course[] = [
-  { id: "cs101", name: "Introduction to Programming", code: "CS101", instructor: "Dr. Smith" },
-  { id: "cs201", name: "Data Structures", code: "CS201", instructor: "Dr. Johnson" },
-  { id: "cs301", name: "Database Systems", code: "CS301", instructor: "Prof. Williams" },
-  { id: "cs401", name: "Software Engineering", code: "CS401", instructor: "Dr. Brown" },
-  { id: "math201", name: "Linear Algebra", code: "MATH201", instructor: "Prof. Davis" },
-  { id: "eng101", name: "Technical Writing", code: "ENG101", instructor: "Dr. Miller" },
+  { id: "cs101", name: "Introduction to Programming", code: "CS101", instructor: "Dr. Traggy", chapters: ["Variables & Data Types", "Control Flow", "Functions", "Arrays & Lists", "OOP Basics"] },
+  { id: "cs201", name: "Data Structures", code: "CS201", instructor: "Dr. Ashraf", chapters: ["Arrays & Linked Lists", "Stacks & Queues", "Trees", "Graphs", "Hashing"] },
+  { id: "cs301", name: "Database", code: "CS301", instructor: "Dr. Fatma", chapters: ["ER Modeling", "Relational Model", "SQL Basics", "Normalization", "Transactions"] },
+  { id: "cs401", name: "Software Engineering", code: "CS401", instructor: "Dr. Yasmin", chapters: ["SDLC Models", "Requirements Engineering", "Design Patterns", "Testing", "Agile Methods"] },
+  { id: "math201", name: "Linear Algebra", code: "MATH201", instructor: "Dr. Emad", chapters: ["Vectors", "Matrices", "Determinants", "Eigenvalues", "Linear Transformations"] },
+  { id: "eng101", name: "English", code: "ENG101", instructor: "Dr. Rahma", chapters: ["Grammar Review", "Academic Writing", "Report Writing", "Presentation Skills", "Research Methods"] },
 ];
 
 export const weeklyPerformanceData: PerformanceData[] = [
@@ -159,4 +160,67 @@ export const getCourseStatus = (avgScore: number): "Bad" | "Average" | "Good" =>
   if (avgScore < 70) return "Bad";
   if (avgScore < 85) return "Average";
   return "Good";
+};
+
+// Schedule data
+export interface ScheduleEntry {
+  day: string;
+  time: string;
+  courseCode: string;
+  courseName: string;
+  room: string;
+}
+
+export const scheduleData: ScheduleEntry[] = [
+  { day: "Sunday", time: "08:00 - 09:30", courseCode: "CS101", courseName: "Introduction to Programming", room: "Hall A1" },
+  { day: "Sunday", time: "10:00 - 11:30", courseCode: "MATH201", courseName: "Linear Algebra", room: "Hall B2" },
+  { day: "Monday", time: "08:00 - 09:30", courseCode: "CS201", courseName: "Data Structures", room: "Lab 3" },
+  { day: "Monday", time: "12:00 - 13:30", courseCode: "ENG101", courseName: "English", room: "Hall C1" },
+  { day: "Tuesday", time: "09:00 - 10:30", courseCode: "CS301", courseName: "Database", room: "Lab 1" },
+  { day: "Tuesday", time: "11:00 - 12:30", courseCode: "CS401", courseName: "Software Engineering", room: "Hall A2" },
+  { day: "Wednesday", time: "08:00 - 09:30", courseCode: "CS101", courseName: "Introduction to Programming", room: "Lab 2" },
+  { day: "Wednesday", time: "10:00 - 11:30", courseCode: "MATH201", courseName: "Linear Algebra", room: "Hall B2" },
+  { day: "Thursday", time: "09:00 - 10:30", courseCode: "CS201", courseName: "Data Structures", room: "Hall A1" },
+  { day: "Thursday", time: "11:00 - 12:30", courseCode: "CS401", courseName: "Software Engineering", room: "Lab 3" },
+];
+
+// Quiz grades data
+export interface QuizGrade {
+  quizName: string;
+  score: number;
+  totalMarks: number;
+  date: string;
+}
+
+export const quizGrades: Record<string, QuizGrade[]> = {
+  cs101: [
+    { quizName: "Quiz 1", score: 18, totalMarks: 20, date: "2026-01-10" },
+    { quizName: "Quiz 2", score: 16, totalMarks: 20, date: "2026-01-24" },
+    { quizName: "Quiz 3", score: 19, totalMarks: 20, date: "2026-02-07" },
+  ],
+  cs201: [
+    { quizName: "Quiz 1", score: 14, totalMarks: 20, date: "2026-01-12" },
+    { quizName: "Quiz 2", score: 15, totalMarks: 20, date: "2026-01-26" },
+    { quizName: "Quiz 3", score: 17, totalMarks: 20, date: "2026-02-09" },
+  ],
+  cs301: [
+    { quizName: "Quiz 1", score: 12, totalMarks: 20, date: "2026-01-11" },
+    { quizName: "Quiz 2", score: 13, totalMarks: 20, date: "2026-01-25" },
+    { quizName: "Quiz 3", score: 14, totalMarks: 20, date: "2026-02-08" },
+  ],
+  cs401: [
+    { quizName: "Quiz 1", score: 19, totalMarks: 20, date: "2026-01-13" },
+    { quizName: "Quiz 2", score: 18, totalMarks: 20, date: "2026-01-27" },
+    { quizName: "Quiz 3", score: 20, totalMarks: 20, date: "2026-02-10" },
+  ],
+  math201: [
+    { quizName: "Quiz 1", score: 15, totalMarks: 20, date: "2026-01-14" },
+    { quizName: "Quiz 2", score: 16, totalMarks: 20, date: "2026-01-28" },
+    { quizName: "Quiz 3", score: 17, totalMarks: 20, date: "2026-02-11" },
+  ],
+  eng101: [
+    { quizName: "Quiz 1", score: 17, totalMarks: 20, date: "2026-01-15" },
+    { quizName: "Quiz 2", score: 18, totalMarks: 20, date: "2026-01-29" },
+    { quizName: "Quiz 3", score: 19, totalMarks: 20, date: "2026-02-12" },
+  ],
 };

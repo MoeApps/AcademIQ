@@ -1,10 +1,12 @@
 import { useState, useMemo } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
+import { useUser } from "@/context/UserContext";
 import Footer from "@/components/layout/Footer";
 import PerformanceChart from "@/components/dashboard/PerformanceChart";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import CourseStatistics from "@/components/dashboard/CourseStatistics";
+import ChapterSelect from "@/components/dashboard/ChapterSelect";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -24,19 +26,16 @@ import {
 
 const CoursePage = () => {
   const { courseId } = useParams<{ courseId: string }>();
+  const { username } = useUser();
   const { toast } = useToast();
   const [dateRange, setDateRange] = useState("all");
+  const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
 
   // Find the course
   const course = courses.find((c) => c.id === courseId);
 
-  // If course not found, redirect to dashboard
-  if (!course || !courseId) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  const performanceData = coursePerformanceData[courseId] || [];
-  const stats = courseStats[courseId];
+  const performanceData = courseId ? coursePerformanceData[courseId] || [] : [];
+  const stats = courseId ? courseStats[courseId] : undefined;
 
   // Filter data based on date range
   const filteredData = useMemo(() => {
@@ -53,26 +52,42 @@ const CoursePage = () => {
   }, [performanceData, dateRange]);
 
   // Calculate average and status
-  const avgScore = filteredData.reduce((sum, d) => sum + d.score, 0) / filteredData.length;
+  const avgScore = filteredData.length > 0
+    ? filteredData.reduce((sum, d) => sum + d.score, 0) / filteredData.length
+    : 0;
   const courseStatus = getCourseStatus(avgScore);
 
+  // If course not found, redirect to dashboard
+  if (!course || !courseId) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+
   const handleGenerateQuiz = () => {
+    if (selectedChapters.length === 0) {
+      toast({ title: "No chapters selected", description: "Please select at least one chapter.", variant: "destructive" });
+      return;
+    }
     toast({
       title: "Generating Quiz",
-      description: "AI is creating a personalized quiz based on your course materials...",
+      description: `AI is creating a quiz based on: ${selectedChapters.join(", ")}`,
     });
   };
 
   const handleGenerateNotes = () => {
+    if (selectedChapters.length === 0) {
+      toast({ title: "No chapters selected", description: "Please select at least one chapter.", variant: "destructive" });
+      return;
+    }
     toast({
       title: "Generating Notes",
-      description: "AI is summarizing key concepts from your recent lessons...",
+      description: `AI is summarizing: ${selectedChapters.join(", ")}`,
     });
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <DashboardHeader username="Khaled" />
+      <DashboardHeader username={username || "Student"} />
 
       <main className="container flex-1 py-8">
         {/* Course Header */}
@@ -133,9 +148,16 @@ const CoursePage = () => {
         {/* AI Tools Section */}
         <div className="mt-8 rounded-xl border border-border bg-card p-6">
           <h3 className="mb-4 text-lg font-semibold text-card-foreground">AI Study Tools</h3>
-          <p className="text-sm text-muted-foreground mb-6">
-            Use AI-powered tools to enhance your learning experience.
+          <p className="text-sm text-muted-foreground mb-4">
+            Select chapters then generate a quiz or notes.
           </p>
+          <div className="mb-6">
+            <ChapterSelect
+              chapters={course.chapters}
+              selectedChapters={selectedChapters}
+              onSelectionChange={setSelectedChapters}
+            />
+          </div>
           <div className="flex flex-wrap gap-4">
             <Button onClick={handleGenerateQuiz} className="gap-2">
               <Sparkles className="h-4 w-4" />

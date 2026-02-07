@@ -39,7 +39,7 @@ All colors MUST be HSL.
     --radius: 0.75rem;
 
     /* Custom tokens for landing page */
-    --hero-overlay: 0 0% 30%;
+    --hero-overlay: 252 58% 40%;
     --footer-bg: 248 30% 12%;
     --footer-foreground: 0 0% 95%;
     --auth-gradient-start: 252 58% 55%;

@@ -13,7 +13,7 @@ const Footer = () => {
               <span className="text-lg font-semibold">AcademIQ</span>
             </div>
             <p className="text-sm text-footer-foreground/70">
-              A supporting learning management platform designed to enhance student performance tracking alongside Moodle LMS.
+              A supplementary learning management platform designed to enhance student performance tracking alongside Moodle LMS.
             </p>
           </div>
           
