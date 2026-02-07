@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GraduationCap, ChevronDown, Calendar, Award, BookOpen, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
-import { courses } from "@/data/mockData";
+import { fetchCourses, type CourseApi } from "@/lib/api";
 
 interface DashboardHeaderProps {
   username?: string;
@@ -20,6 +21,17 @@ interface DashboardHeaderProps {
 
 const DashboardHeader = ({ username = "John Doe" }: DashboardHeaderProps) => {
   const navigate = useNavigate();
+  const [courses, setCourses] = useState<CourseApi[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchCourses().then((list) => {
+      if (!cancelled) setCourses(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogout = () => {
     navigate("/");
@@ -49,13 +61,13 @@ const DashboardHeader = ({ username = "John Doe" }: DashboardHeaderProps) => {
             <DropdownMenuContent align="end" className="w-56 bg-popover">
               {courses.map((course) => (
                 <DropdownMenuItem 
-                  key={course.id}
-                  onClick={() => navigate(`/course/${course.id}`)}
+                  key={course.course_id}
+                  onClick={() => navigate(`/course/${course.course_id}`)}
                   className="cursor-pointer"
                 >
                   <div className="flex flex-col">
-                    <span className="font-medium">{course.code}</span>
-                    <span className="text-xs text-muted-foreground">{course.name}</span>
+                    <span className="font-medium">{course.course_id}</span>
+                    <span className="text-xs text-muted-foreground">{course.course_name ?? course.course_id}</span>
                   </div>
                 </DropdownMenuItem>
               ))}
@@ -95,11 +107,11 @@ const DashboardHeader = ({ username = "John Doe" }: DashboardHeaderProps) => {
                   <DropdownMenuSubContent className="bg-popover">
                     {courses.map((course) => (
                       <DropdownMenuItem 
-                        key={course.id}
-                        onClick={() => navigate(`/course/${course.id}`)}
+                        key={course.course_id}
+                        onClick={() => navigate(`/course/${course.course_id}`)}
                         className="cursor-pointer"
                       >
-                        {course.code} - {course.name}
+                        {course.course_id} - {course.course_name ?? course.course_id}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuSubContent>
