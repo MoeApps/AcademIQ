@@ -1,8 +1,8 @@
 import { FileText, HelpCircle, Clock } from "lucide-react";
-import { CourseStats } from "@/data/mockData";
+import type { CourseStatsApi } from "@/lib/api";
 
 interface CourseStatisticsProps {
-  stats: CourseStats;
+  stats: CourseStatsApi;
 }
 
 const CourseStatistics = ({ stats }: CourseStatisticsProps) => {
