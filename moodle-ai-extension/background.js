@@ -1,5 +1,5 @@
 const STORAGE_KEY = "moodleData";
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // session end after 3 mins of inactivity
 
 const activeTabs = new Map();
 const pageViewsByTab = new Map();
@@ -13,8 +13,8 @@ const defaultData = () => ({
     },
     metricsByCourse: {},
     materialsByCourse: {},
-    courses: [],
-    behavior: {
+    courses: [], // export flexibity (ashan aamel export brahty)
+    behavior: { // bgahez lel ml models
         total_time_spent_on_moodle: 0,
         active_days_count: 0,
         session_count: 0,
@@ -35,7 +35,7 @@ const defaultData = () => ({
     }
 });
 
-const createDefaultCourseMetrics = (course) => ({
+const createDefaultCourseMetrics = (course) => ({ // mapping el data ely gebtaha mn el content.js ashan adeha lel ml model later
     course_id: course.course_id,
     course_name: course.course_name || "Unknown Course",
     total_visits: 0,
@@ -110,7 +110,7 @@ const syncMetricsByCourse = (data, coursesMap) => {
     });
 };
 
-const updateSessionMetrics = (data, timestamp, isClick) => {
+const updateSessionMetrics = (data, timestamp, isClick) => { // bupadate el sessions
     const meta = data._meta || defaultData()._meta;
     const behavior = data.behavior;
     const lastActivity = meta.lastActivity;
@@ -255,7 +255,7 @@ const mergeMaterials = (data, materials) => {
     data.knowledge_base = buildKnowledgeBase(data.learning_materials);
 };
 
-const finalizeActiveTab = async (tabId, endTime) => {
+const finalizeActiveTab = async (tabId, endTime) => { // time gets tracked by tap msh ay haga etfathet w khalas
     const active = activeTabs.get(tabId);
     if (!active) return;
     const durationMs = Math.max(0, endTime - active.startTime);
@@ -284,7 +284,7 @@ const finalizeActiveTab = async (tabId, endTime) => {
     activeTabs.delete(tabId);
 };
 
-const shouldCountVisit = (tabId, payload) => {
+const shouldCountVisit = (tabId, payload) => { // ashan el bug bta3 el refresh. visits is counted lama ye3ml visit fe3lan bas.
     if (typeof tabId !== "number" || !payload?.course_id) return false;
     if (payload.navigation_type === "reload") return false;
 
@@ -297,7 +297,7 @@ const shouldCountVisit = (tabId, payload) => {
     return true;
 };
 
-const incrementCourseMetric = (course, metricName, courseId, source) => {
+const incrementCourseMetric = (course, metricName, courseId, source) => { 
     if (!course || typeof course[metricName] !== "number") return;
     course[metricName] += 1;
     console.log(`[moodle-ai] metric increment ${metricName} +1 course=${courseId} source=${source}`);
