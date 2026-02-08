@@ -1,9 +1,21 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+import traceback
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from datetime import datetime
-# import numpy as np
-# import joblib
+import os
+import sys
+import statistics
+
+# Ensure project root is on sys.path so sibling packages (e.g. `config`, `schema`, `models`)
+# can be imported when running `uvicorn` from the `backend/` directory.
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
+# import local app-level modules
+# database uses a MongoClient and ping helper
 from .database import ping_db
 from ..routes.route import router
 
@@ -16,7 +28,12 @@ app.include_router(router)
 
 @app.on_event("startup")
 def startup_db():
-    ping_db()
+    try:
+        ping_db()
+    except Exception as e:
+        # don't let DB/connectivity issues prevent the app from starting; log for debugging
+        print(f"startup_db: ping_db() failed: {e}")
+        print(traceback.format_exc())
 
 # ------------------------------------
 # Load ML models & scaler
@@ -99,7 +116,17 @@ class FeaturesPayload(BaseModel):
 # ------------------------------------
 @app.get("/")
 def root():
-    return {"message": "academIQ backend is running"}
+    try:
+        return {"message": "academIQ backend is running"}
+    except Exception as e:
+        # return error detail to help diagnose the 500
+        return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
+
+
+@app.exception_handler(Exception)
+def global_exception_handler(request, exc: Exception):
+    # expose the exception message and stack for local debugging (do not use in production)
+    return JSONResponse(status_code=500, content={"error": str(exc), "trace": traceback.format_exc()})
 
 # ------------------------------------
 # --------- Ingest ------------------
@@ -115,33 +142,33 @@ async def ingest(raw_data: RawMoodlePayload):
 # ------------------------------------
 # --------- Predict -----------------
 # ------------------------------------
-@app.post("/predict")
-async def predict(features: FeaturesPayload):
-    if risk_model is None:
-        raise HTTPException(status_code=500, detail="Risk model not loaded")
-    try:
-        X = np.array([[
-            features.total_time_spent,
-            features.active_days,
-            features.access_frequency,
-            features.avg_quiz_score,
-            features.quiz_score_std,
-            features.avg_assignment_score,
-            features.late_submission_ratio,
-            features.avg_final_grade
-        ]])
-        risk_cluster = int(risk_model.predict(X)[0])
-        risk_encoded = risk_cluster
-
-        recommendation = generate_recommendation(risk_cluster)
-        return {
-            "status": "ok",
-            "risk_cluster": risk_cluster,
-            "risk_cluster_encoded": risk_encoded,
-            "recommendation": recommendation
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/predict")
+# async def predict(features: FeaturesPayload):
+#     if risk_model is None:
+#         raise HTTPException(status_code=500, detail="Risk model not loaded")
+#     try:
+#         X = np.array([[
+#             features.total_time_spent,
+#             features.active_days,
+#             features.access_frequency,
+#             features.avg_quiz_score,
+#             features.quiz_score_std,
+#             features.avg_assignment_score,
+#             features.late_submission_ratio,
+#             features.avg_final_grade
+#         ]])
+#         risk_cluster = int(risk_model.predict(X)[0])
+#         risk_encoded = risk_cluster
+#
+#         recommendation = generate_recommendation(risk_cluster)
+#         return {
+#             "status": "ok",
+#             "risk_cluster": risk_cluster,
+#             "risk_cluster_encoded": risk_encoded,
+#             "recommendation": recommendation
+#         }
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 # ------------------------------------
 # --------- Helper functions ---------
@@ -155,7 +182,8 @@ def compute_features(payload: RawMoodlePayload) -> dict:
 
     # Access frequency (average visits per course)
     if payload.courses:
-        access_frequency = np.mean([c.visits for c in payload.courses.values()])
+        visit_counts = [c.visits for c in payload.courses.values()]
+        access_frequency = statistics.mean(visit_counts) if visit_counts else 0
     else:
         access_frequency = 0
 
@@ -165,8 +193,8 @@ def compute_features(payload: RawMoodlePayload) -> dict:
         for q in course.quizzes:
             if q.score is not None:
                 quiz_scores.append(q.score)
-    avg_quiz_score = float(np.mean(quiz_scores)) if quiz_scores else 0.0
-    quiz_score_std = float(np.std(quiz_scores)) if quiz_scores else 0.0
+    avg_quiz_score = float(statistics.mean(quiz_scores)) if quiz_scores else 0.0
+    quiz_score_std = float(statistics.stdev(quiz_scores)) if len(quiz_scores) > 1 else 0.0
 
     # Assignment scores & late submission
     assignment_scores = []
@@ -189,7 +217,7 @@ def compute_features(payload: RawMoodlePayload) -> dict:
                         late_count += 1
                 except:
                     pass
-    avg_assignment_score = float(np.mean(assignment_scores)) if assignment_scores else 0.0
+    avg_assignment_score = float(statistics.mean(assignment_scores)) if assignment_scores else 0.0
     late_submission_ratio = float(late_count/total_assignments) if total_assignments else 0.0
 
     # Average final grade
@@ -201,7 +229,7 @@ def compute_features(payload: RawMoodlePayload) -> dict:
                 final_grades.append(val)
             except:
                 pass
-    avg_final_grade = float(np.mean(final_grades)) if final_grades else 0.0
+    avg_final_grade = float(statistics.mean(final_grades)) if final_grades else 0.0
 
     return {
         "total_time_spent": total_time_spent,
