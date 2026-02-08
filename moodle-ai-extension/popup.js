@@ -68,8 +68,18 @@ const getCourseMaterials = (data, courseId) => {
     return fromLegacy;
 };
 
+const getMaterialDownloadLabel = (material) => {
+    if (material.downloadStatus === "No downloadable files") return "No downloadable files";
+    if ((material.fileType || "").toLowerCase() === "folder" && !material.downloadable) return "No downloadable files";
+    return null;
+};
+
 const isMaterialDownloadable = (material) => {
     const fileType = (material.fileType || "").toLowerCase();
+    if (fileType === "folder") return false;
+    if (fileType === "html") return false;
+
+    if (material.downloadStatus === "No downloadable files") return false;
     const hasDirectExt = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|zip)(\?|$)/i.test(material.url || "");
     return /^https?:/i.test(material.url || "") && (material.downloadable || hasDirectExt || (fileType !== "link" && fileType !== "unknown"));
 };
