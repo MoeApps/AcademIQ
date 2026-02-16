@@ -63,9 +63,7 @@ async def delete_todo(id: str):
         raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
 
 
-# ===========================
-# ASSIGNMENTS CRUD ENDPOINTS
-# ===========================
+
 
 # Get all assignments
 @router.get("/assignments")
@@ -291,9 +289,9 @@ async def delete_course(id: str):
         raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
 
 
-# ===========================
+
 # RAW MOODLE PAYLOAD CRUD ENDPOINTS
-# ===========================
+
 
 # Get all raw moodle payloads
 @router.get("/raw-moodle-payloads")
