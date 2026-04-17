@@ -1,0 +1,4 @@
+# If your shell is in "final project" (parent of AcademIQ-main), use:
+#   pip install -r AcademIQ-main/backend/requirements.txt
+# Or cd into AcademIQ-main and: pip install -r requirements.txt
+-r AcademIQ-main/backend/requirements.txt

@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 248 30% 15%;
+
+    --card: 252 30% 96%;
+    --card-foreground: 248 30% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 248 30% 15%;
+
+    --primary: 252 58% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 252 30% 94%;
+    --secondary-foreground: 248 30% 15%;
+
+    --muted: 252 20% 94%;
+    --muted-foreground: 248 15% 45%;
+
+    --accent: 252 40% 92%;
+    --accent-foreground: 248 30% 15%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 252 20% 88%;
+    --input: 0 0% 100%;
+    --ring: 252 58% 60%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens for landing page */
+    --hero-overlay: 0 0% 30%;
+    --footer-bg: 248 30% 12%;
+    --footer-foreground: 0 0% 95%;
+    --auth-gradient-start: 252 58% 55%;
+    --auth-gradient-end: 280 60% 50%;
+  }
+
+  .dark {
+    --background: 248 30% 8%;
+    --foreground: 0 0% 95%;
+
+    --card: 248 30% 12%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 248 30% 12%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 252 58% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 248 25% 18%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 248 25% 18%;
+    --muted-foreground: 248 15% 60%;
+
+    --accent: 248 25% 18%;
+    --accent-foreground: 0 0% 95%;
+
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 248 25% 20%;
+    --input: 248 25% 18%;
+    --ring: 252 58% 60%;
+
+    --hero-overlay: 252 58% 25%;
+    --footer-bg: 248 30% 6%;
+    --footer-foreground: 0 0% 90%;
+    --auth-gradient-start: 252 58% 45%;
+    --auth-gradient-end: 280 60% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
