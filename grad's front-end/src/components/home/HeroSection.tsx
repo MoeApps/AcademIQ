@@ -13,7 +13,8 @@ const HeroSection = () => {
           alt="Students studying together"
           className="h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-hero-overlay/75" />
+        <div className="absolute inset-0 bg-gradient-to-br from-black/90 via-neutral-900/80 to-neutral-700/70" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
       </div>
       
       {/* Content */}
@@ -44,7 +45,7 @@ const HeroSection = () => {
         <Button 
           asChild 
           size="lg" 
-          className="group bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+          className="group bg-white text-neutral-900 hover:bg-neutral-200 transition-all"
         >
           <Link to="/signin">
             Get Started

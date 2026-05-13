@@ -39,11 +39,11 @@ All colors MUST be HSL.
     --radius: 0.75rem;
 
     /* Custom tokens for landing page */
-    --hero-overlay: 0 0% 30%;
-    --footer-bg: 248 30% 12%;
+    --hero-overlay: 0 0% 8%;
+    --footer-bg: 0 0% 8%;
     --footer-foreground: 0 0% 95%;
-    --auth-gradient-start: 252 58% 55%;
-    --auth-gradient-end: 280 60% 50%;
+    --auth-gradient-start: 0 0% 18%;
+    --auth-gradient-end: 0 0% 6%;
   }
 
   .dark {
@@ -75,11 +75,11 @@ All colors MUST be HSL.
     --input: 248 25% 18%;
     --ring: 252 58% 60%;
 
-    --hero-overlay: 252 58% 25%;
-    --footer-bg: 248 30% 6%;
+    --hero-overlay: 0 0% 5%;
+    --footer-bg: 0 0% 4%;
     --footer-foreground: 0 0% 90%;
-    --auth-gradient-start: 252 58% 45%;
-    --auth-gradient-end: 280 60% 40%;
+    --auth-gradient-start: 0 0% 14%;
+    --auth-gradient-end: 0 0% 4%;
   }
 }
 

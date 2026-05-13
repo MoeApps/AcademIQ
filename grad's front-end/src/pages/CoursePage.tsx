@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams, Navigate } from "react-router-dom";
+import { useParams, Navigate, useNavigate } from "react-router-dom";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import { useUser } from "@/context/UserContext";
 import Footer from "@/components/layout/Footer";
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, FileText } from "lucide-react";
+import { Sparkles, FileText, Brain } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   courses,
@@ -28,6 +28,7 @@ const CoursePage = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const { username } = useUser();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [dateRange, setDateRange] = useState("all");
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
 
@@ -68,10 +69,7 @@ const CoursePage = () => {
       toast({ title: "No chapters selected", description: "Please select at least one chapter.", variant: "destructive" });
       return;
     }
-    toast({
-      title: "Generating Quiz",
-      description: `AI is creating a quiz based on: ${selectedChapters.join(", ")}`,
-    });
+    navigate("/generated-quizzes", { state: { courseId, chapters: selectedChapters } });
   };
 
   const handleGenerateNotes = () => {
@@ -79,10 +77,7 @@ const CoursePage = () => {
       toast({ title: "No chapters selected", description: "Please select at least one chapter.", variant: "destructive" });
       return;
     }
-    toast({
-      title: "Generating Notes",
-      description: `AI is summarizing: ${selectedChapters.join(", ")}`,
-    });
+    navigate("/generated-notes", { state: { courseId, chapters: selectedChapters } });
   };
 
   return (
@@ -125,7 +120,15 @@ const CoursePage = () => {
           </div>
           <div className="lg:col-span-1">
             <StatusBadge status={courseStatus} type="course" />
-            
+
+            <Button
+              onClick={() => navigate("/student-insights", { state: { courseId } })}
+              className="mt-4 w-full gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/80 shadow-md transition-all hover:shadow-lg hover:scale-[1.02]"
+            >
+              <Brain className="h-4 w-4" />
+              View Personalized Insights
+            </Button>
+
             <div className="mt-6 rounded-xl border border-border bg-card p-6">
               <h3 className="mb-4 text-lg font-semibold text-card-foreground">
                 Course Average

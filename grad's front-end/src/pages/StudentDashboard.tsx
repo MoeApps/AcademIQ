@@ -2,6 +2,8 @@ import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import Footer from "@/components/layout/Footer";
 import PerformanceChart from "@/components/dashboard/PerformanceChart";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import CoursePredictedGrades from "@/components/dashboard/CoursePredictedGrades";
+import StudyPatternCard from "@/components/dashboard/StudyPatternCard";
 import { weeklyPerformanceData, getOverallStatus } from "@/data/mockData";
 import { useUser } from "@/context/UserContext";
 
@@ -9,6 +11,18 @@ const StudentDashboard = () => {
   const { username } = useUser();
   const avgScore = weeklyPerformanceData.reduce((sum, d) => sum + d.score, 0) / weeklyPerformanceData.length;
   const overallStatus = getOverallStatus(avgScore);
+  const engagement = [
+    { day: "Mon", hours: 2.1 },
+    { day: "Tue", hours: 2.4 },
+    { day: "Wed", hours: 2.0 },
+    { day: "Thu", hours: 6.8 },
+    { day: "Fri", hours: 7.2 },
+    { day: "Sat", hours: 1.5 },
+    { day: "Sun", hours: 1.8 },
+  ];
+  const burnoutRisk =
+    Math.max(...engagement.map((e) => e.hours)) >
+    (engagement.reduce((s, e) => s + e.hours, 0) / engagement.length) * 2;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -54,6 +68,16 @@ const StudentDashboard = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Predicted Grade per Course */}
+        <div className="mt-6">
+          <CoursePredictedGrades />
+        </div>
+
+        {/* Study Pattern Analysis */}
+        <div className="mt-6">
+          <StudyPatternCard data={engagement} burnoutRisk={burnoutRisk} />
         </div>
       </main>
 

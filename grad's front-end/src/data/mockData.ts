@@ -224,3 +224,249 @@ export const quizGrades: Record<string, QuizGrade[]> = {
     { quizName: "Quiz 3", score: 19, totalMarks: 20, date: "2026-02-12" },
   ],
 };
+
+// AI generated quizzes
+export type Difficulty = "Easy" | "Medium" | "Hard";
+export type QuizType = "Multiple Choice" | "True/False" | "Mixed";
+
+export interface GeneratedQuiz {
+  id: string;
+  title: string;
+  courseId: string;
+  courseName: string;
+  difficulty: Difficulty;
+  type: QuizType;
+  questions: number;
+  durationMin: number;
+  createdAt: string;
+}
+
+export const generatedQuizzes: GeneratedQuiz[] = [
+  { id: "q1", title: "Variables & Control Flow Drill", courseId: "cs101", courseName: "Introduction to Programming", difficulty: "Easy", type: "Multiple Choice", questions: 10, durationMin: 15, createdAt: "2026-05-09" },
+  { id: "q2", title: "Trees & Graph Traversals", courseId: "cs201", courseName: "Data Structures", difficulty: "Hard", type: "Mixed", questions: 15, durationMin: 30, createdAt: "2026-05-08" },
+  { id: "q3", title: "SQL Joins & Normalization", courseId: "cs301", courseName: "Database", difficulty: "Medium", type: "Multiple Choice", questions: 12, durationMin: 20, createdAt: "2026-05-07" },
+  { id: "q4", title: "Agile vs Waterfall", courseId: "cs401", courseName: "Software Engineering", difficulty: "Easy", type: "True/False", questions: 8, durationMin: 10, createdAt: "2026-05-06" },
+  { id: "q5", title: "Eigenvalues Practice Set", courseId: "math201", courseName: "Linear Algebra", difficulty: "Hard", type: "Mixed", questions: 14, durationMin: 35, createdAt: "2026-05-05" },
+  { id: "q6", title: "Academic Writing Essentials", courseId: "eng101", courseName: "English", difficulty: "Medium", type: "Multiple Choice", questions: 10, durationMin: 18, createdAt: "2026-05-04" },
+];
+
+// AI generated notes
+export interface GeneratedNote {
+  id: string;
+  title: string;
+  courseId: string;
+  courseName: string;
+  summary: string;
+  createdAt: string;
+}
+
+export const generatedNotes: GeneratedNote[] = [
+  { id: "n1", title: "OOP Fundamentals — Cheat Sheet", courseId: "cs101", courseName: "Introduction to Programming", summary: "Concise overview of classes, objects, inheritance, polymorphism and encapsulation with quick examples.", createdAt: "2026-05-10" },
+  { id: "n2", title: "Graph Algorithms Summary", courseId: "cs201", courseName: "Data Structures", summary: "BFS, DFS, Dijkstra and topological sorting with complexity comparisons and pseudocode.", createdAt: "2026-05-09" },
+  { id: "n3", title: "Normalization (1NF–BCNF)", courseId: "cs301", courseName: "Database", summary: "Step-by-step decomposition examples and anomaly elimination guide for relational schemas.", createdAt: "2026-05-08" },
+  { id: "n4", title: "Common Design Patterns", courseId: "cs401", courseName: "Software Engineering", summary: "Singleton, Factory, Observer and Strategy patterns with TypeScript-style examples.", createdAt: "2026-05-07" },
+  { id: "n5", title: "Matrix Operations Recap", courseId: "math201", courseName: "Linear Algebra", summary: "Multiplication, inverse, determinant and rank with worked numerical examples.", createdAt: "2026-05-06" },
+  { id: "n6", title: "Report Writing Guide", courseId: "eng101", courseName: "English", summary: "Structure, tone and citation tips for producing strong academic reports.", createdAt: "2026-05-05" },
+];
+
+// Per-course predicted grades
+export type PredictedStatus = "Excellent" | "Good" | "Average" | "At Risk";
+export type Trend = "up" | "down" | "flat";
+
+export interface CoursePrediction {
+  courseId: string;
+  courseName: string;
+  score: number; // 0-100
+  trend: Trend;
+}
+
+export const coursePredictions: CoursePrediction[] = [
+  { courseId: "cs101", courseName: "Introduction to Programming", score: 89, trend: "up" },
+  { courseId: "cs201", courseName: "Data Structures", score: 78, trend: "up" },
+  { courseId: "cs301", courseName: "Database", score: 66, trend: "down" },
+  { courseId: "cs401", courseName: "Software Engineering", score: 92, trend: "up" },
+  { courseId: "math201", courseName: "Linear Algebra", score: 81, trend: "flat" },
+  { courseId: "eng101", courseName: "English", score: 88, trend: "up" },
+];
+
+export const getPredictedStatus = (s: number): PredictedStatus => {
+  if (s >= 85) return "Excellent";
+  if (s >= 75) return "Good";
+  if (s >= 65) return "Average";
+  return "At Risk";
+};
+
+// Interactive quiz questions (mock) per course
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+}
+
+export const quizQuestionBank: Record<string, QuizQuestion[]> = {
+  cs101: [
+    { id: "1", question: "Which keyword declares a constant in JavaScript?", options: ["var", "let", "const", "static"], correctIndex: 2 },
+    { id: "2", question: "Which of these is NOT a primitive data type?", options: ["string", "number", "object", "boolean"], correctIndex: 2 },
+    { id: "3", question: "What does a function return by default if no return statement is present?", options: ["null", "0", "undefined", "false"], correctIndex: 2 },
+    { id: "4", question: "Which loop is guaranteed to execute at least once?", options: ["for", "while", "do...while", "foreach"], correctIndex: 2 },
+    { id: "5", question: "OOP stands for?", options: ["Open Object Programming", "Object-Oriented Programming", "Operational Output Process", "Optimal Order Pattern"], correctIndex: 1 },
+  ],
+  cs201: [
+    { id: "1", question: "Which data structure uses LIFO order?", options: ["Queue", "Stack", "Heap", "Tree"], correctIndex: 1 },
+    { id: "2", question: "Average time complexity of HashMap lookup?", options: ["O(1)", "O(log n)", "O(n)", "O(n log n)"], correctIndex: 0 },
+    { id: "3", question: "Which traversal visits root first?", options: ["Inorder", "Preorder", "Postorder", "Level-order"], correctIndex: 1 },
+    { id: "4", question: "BFS uses which structure?", options: ["Stack", "Queue", "Heap", "Set"], correctIndex: 1 },
+    { id: "5", question: "Best case for QuickSort?", options: ["O(n^2)", "O(n log n)", "O(n)", "O(log n)"], correctIndex: 1 },
+  ],
+  cs301: [
+    { id: "1", question: "Which normal form removes transitive dependencies?", options: ["1NF", "2NF", "3NF", "BCNF"], correctIndex: 2 },
+    { id: "2", question: "SQL keyword to remove duplicates?", options: ["UNIQUE", "DISTINCT", "DEDUP", "ONLY"], correctIndex: 1 },
+    { id: "3", question: "Which JOIN returns only matching rows?", options: ["LEFT", "RIGHT", "INNER", "FULL"], correctIndex: 2 },
+    { id: "4", question: "ACID 'I' stands for?", options: ["Integrity", "Isolation", "Indexing", "Inheritance"], correctIndex: 1 },
+    { id: "5", question: "Primary key cannot be?", options: ["Unique", "Indexed", "Null", "Numeric"], correctIndex: 2 },
+  ],
+  cs401: [
+    { id: "1", question: "Agile values working software over?", options: ["Documentation", "People", "Tools", "Code"], correctIndex: 0 },
+    { id: "2", question: "Singleton ensures?", options: ["Many instances", "One instance", "No instance", "Lazy load only"], correctIndex: 1 },
+    { id: "3", question: "Which is a black-box testing technique?", options: ["Path coverage", "Equivalence partitioning", "Branch coverage", "Statement coverage"], correctIndex: 1 },
+    { id: "4", question: "Sprint length in Scrum is typically?", options: ["1 day", "1-4 weeks", "3 months", "6 months"], correctIndex: 1 },
+    { id: "5", question: "UML class diagrams show?", options: ["Sequences", "States", "Structure", "Activities"], correctIndex: 2 },
+  ],
+  math201: [
+    { id: "1", question: "Determinant of identity matrix In is?", options: ["0", "1", "n", "n!"], correctIndex: 1 },
+    { id: "2", question: "Eigenvalues are roots of?", options: ["Trace polynomial", "Characteristic polynomial", "Minimal polynomial only", "Hessian"], correctIndex: 1 },
+    { id: "3", question: "Rank of a 3x3 invertible matrix?", options: ["1", "2", "3", "0"], correctIndex: 2 },
+    { id: "4", question: "Dot product of orthogonal vectors equals?", options: ["1", "-1", "0", "Undefined"], correctIndex: 2 },
+    { id: "5", question: "A linear transformation preserves?", options: ["Only addition", "Addition & scalar multiplication", "Only scalars", "Norms always"], correctIndex: 1 },
+  ],
+  eng101: [
+    { id: "1", question: "Which is a coordinating conjunction?", options: ["because", "although", "but", "since"], correctIndex: 2 },
+    { id: "2", question: "An abstract in a research paper should be?", options: ["Long & detailed", "A concise summary", "Only references", "A figure"], correctIndex: 1 },
+    { id: "3", question: "Active voice example?", options: ["The ball was kicked", "Kicked was the ball", "She kicked the ball", "Being kicked"], correctIndex: 2 },
+    { id: "4", question: "Citations primarily aim to?", options: ["Add length", "Credit sources", "Show vocabulary", "Confuse readers"], correctIndex: 1 },
+    { id: "5", question: "A thesis statement appears typically in?", options: ["Conclusion", "Introduction", "Appendix", "Footnote"], correctIndex: 1 },
+  ],
+};
+
+// Detailed AI-generated note content per course
+export interface NoteContent {
+  courseId: string;
+  title: string;
+  summary: string;
+  keyPoints: string[];
+  sections: { heading: string; body: string }[];
+}
+
+export const noteContentBank: Record<string, NoteContent> = {
+  cs101: {
+    courseId: "cs101",
+    title: "Introduction to Programming — Study Notes",
+    summary:
+      "A consolidated overview of programming fundamentals: variables, control flow, functions, collections, and an introduction to object-oriented thinking.",
+    keyPoints: [
+      "Variables store typed values; prefer immutability when possible.",
+      "Conditionals and loops control program flow.",
+      "Functions encapsulate reusable behavior with clear inputs and outputs.",
+      "Lists, arrays, and maps are core collection types.",
+      "OOP organizes data and behavior around objects.",
+    ],
+    sections: [
+      { heading: "Variables & Data Types", body: "Variables hold values of a given type. Most languages distinguish primitive types (numbers, booleans, strings) from reference types (objects, arrays). Prefer constants when a value should not change." },
+      { heading: "Control Flow", body: "if/else statements branch execution. Loops (for, while, do-while) repeat a block until a condition is met. Use break and continue carefully to keep code readable." },
+      { heading: "Functions", body: "Functions take parameters, do work, and return a value. Pure functions (no side effects) are easier to test. Prefer small focused functions over large ones." },
+      { heading: "OOP Basics", body: "Classes describe the shape and behavior of objects. The four pillars are encapsulation, inheritance, polymorphism, and abstraction." },
+    ],
+  },
+  cs201: {
+    courseId: "cs201",
+    title: "Data Structures — Study Notes",
+    summary:
+      "Core data structures and their trade-offs: arrays, linked lists, stacks, queues, trees, graphs, and hashing.",
+    keyPoints: [
+      "Arrays give O(1) random access; linked lists give O(1) insertion at known nodes.",
+      "Stacks are LIFO; queues are FIFO.",
+      "Binary trees power many search and traversal algorithms.",
+      "Graphs model relationships; BFS/DFS are foundational traversals.",
+      "Hashing offers near-constant average lookup.",
+    ],
+    sections: [
+      { heading: "Linear Structures", body: "Arrays store contiguous elements; linked lists chain nodes together. Stacks and queues are restricted-access linear structures used in parsing, scheduling, and traversal." },
+      { heading: "Trees", body: "Trees are hierarchical. Binary search trees support ordered operations; balanced variants (AVL, Red-Black) keep operations logarithmic." },
+      { heading: "Graphs", body: "Graphs are vertices and edges. BFS explores by layers; DFS dives deep first. Dijkstra finds shortest paths with non-negative weights." },
+      { heading: "Hashing", body: "Hash maps map keys to buckets via a hash function. Good hash functions distribute keys uniformly to avoid collisions." },
+    ],
+  },
+  cs301: {
+    courseId: "cs301",
+    title: "Database — Study Notes",
+    summary: "Relational databases, SQL essentials, normalization, and transactions.",
+    keyPoints: [
+      "ER diagrams model entities and relationships.",
+      "Primary keys uniquely identify rows; foreign keys link tables.",
+      "Normalization reduces redundancy.",
+      "ACID guarantees correct concurrent execution.",
+      "Indexes speed up queries at the cost of writes.",
+    ],
+    sections: [
+      { heading: "Relational Model", body: "Data is represented as relations (tables) with attributes (columns) and tuples (rows). Operations follow relational algebra." },
+      { heading: "SQL", body: "SQL queries combine SELECT, FROM, WHERE, GROUP BY and JOIN clauses. Use INNER JOIN for matched rows and LEFT/RIGHT JOIN to keep one side." },
+      { heading: "Normalization", body: "1NF removes repeating groups, 2NF removes partial dependencies, 3NF removes transitive dependencies, BCNF tightens 3NF." },
+      { heading: "Transactions", body: "Transactions group statements that must succeed or fail together, providing Atomicity, Consistency, Isolation, and Durability." },
+    ],
+  },
+  cs401: {
+    courseId: "cs401",
+    title: "Software Engineering — Study Notes",
+    summary: "Methodologies, design, testing, and the software development lifecycle.",
+    keyPoints: [
+      "SDLC defines stages from requirements to maintenance.",
+      "Agile values iteration and feedback over rigid plans.",
+      "Design patterns capture proven solutions.",
+      "Testing pyramid: unit > integration > end-to-end.",
+      "Version control underpins collaboration.",
+    ],
+    sections: [
+      { heading: "SDLC", body: "Common phases: requirements, design, implementation, testing, deployment, maintenance. Different models (Waterfall, Spiral, Agile) sequence them differently." },
+      { heading: "Design Patterns", body: "Creational (Singleton, Factory), Structural (Adapter, Decorator) and Behavioral (Observer, Strategy) patterns each address recurring design problems." },
+      { heading: "Testing", body: "Unit tests validate small pieces in isolation. Integration tests check combined behavior. End-to-end tests validate user flows." },
+      { heading: "Agile", body: "Short iterations, continuous feedback and incremental delivery emphasize working software and customer collaboration." },
+    ],
+  },
+  math201: {
+    courseId: "math201",
+    title: "Linear Algebra — Study Notes",
+    summary: "Vectors, matrices, determinants, eigenvalues, and linear transformations.",
+    keyPoints: [
+      "Matrices represent linear transformations.",
+      "Determinant indicates invertibility and scaling.",
+      "Eigenvectors keep direction under transformation.",
+      "Rank measures independent dimensions.",
+      "Orthogonality simplifies projections and decompositions.",
+    ],
+    sections: [
+      { heading: "Vectors & Spaces", body: "Vectors live in vector spaces with addition and scalar multiplication. Linear combinations span subspaces." },
+      { heading: "Matrices", body: "Matrices encode systems of linear equations and linear maps. Multiplication composes transformations." },
+      { heading: "Determinants & Inverses", body: "A square matrix is invertible iff its determinant is non-zero. Determinants also describe how transformations scale volume." },
+      { heading: "Eigenvalues", body: "Eigenvalues λ satisfy Av = λv. Diagonalization simplifies repeated matrix application." },
+    ],
+  },
+  eng101: {
+    courseId: "eng101",
+    title: "English — Study Notes",
+    summary: "Grammar, academic writing, and research/presentation skills.",
+    keyPoints: [
+      "Use active voice for clarity.",
+      "Strong thesis statements guide essays.",
+      "Cite sources to credit original authors.",
+      "Reports follow predictable structures.",
+      "Practice drives presentation confidence.",
+    ],
+    sections: [
+      { heading: "Grammar Review", body: "Master subject-verb agreement, tense consistency, and punctuation. Read your work aloud to catch awkward constructions." },
+      { heading: "Academic Writing", body: "Begin with a clear thesis. Use evidence to support claims. Conclude by restating significance, not just summarizing." },
+      { heading: "Citations", body: "Use a consistent citation style (APA, MLA, IEEE). Quote sparingly; paraphrase and credit sources." },
+      { heading: "Presentations", body: "Open with a hook, structure around 3 main ideas, and close with a memorable takeaway. Rehearse out loud." },
+    ],
+  },
+};
