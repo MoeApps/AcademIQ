@@ -1,4 +1,5 @@
 const STORAGE_KEY = "moodleData";
+const BACKEND_URL = "http://localhost:8000/raw-moodle-payloads"; // Change to your actual backend URL
 
 const refs = {
     refreshBtn: document.getElementById("refreshBtn"),
@@ -40,6 +41,32 @@ const getStorageData = () =>
         });
     });
 
+const syncToBackend = async (data) => {
+    if (!data) {
+        alert("No data to sync.");
+        return false;
+    }
+    const payload = sanitizePayload(data);
+    try {
+        const response = await fetch(BACKEND_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        const result = await response.json();
+        console.log("Sync successful:", result);
+        return true;
+    } catch (error) {
+        console.error("Sync failed:", error);
+        alert(`Sync failed: ${error.message}`);
+        return false;
+    }
+};
+
 const createStatCard = (label, value) => {
     const el = document.createElement("div");
     el.className = "stat";
@@ -61,7 +88,6 @@ const normalizeMaterial = (material, courseId) => ({
 const getCourseMaterials = (data, courseId) => {
     const fromScoped = Array.isArray(data?.materialsByCourse?.[courseId]) ? data.materialsByCourse[courseId].map((m) => normalizeMaterial(m, courseId)) : [];
     if (fromScoped.length) return fromScoped;
-
     const fromLegacy = Array.isArray(data?.learning_materials)
         ? data.learning_materials.filter((item) => (item.courseId || item.course_id) === courseId).map((m) => normalizeMaterial(m, courseId))
         : [];
@@ -78,7 +104,6 @@ const isMaterialDownloadable = (material) => {
     const fileType = (material.fileType || "").toLowerCase();
     if (fileType === "folder") return false;
     if (fileType === "html") return false;
-
     if (material.downloadStatus === "No downloadable files") return false;
     const hasDirectExt = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|zip)(\?|$)/i.test(material.url || "");
     return /^https?:/i.test(material.url || "") && (material.downloadable || hasDirectExt || (fileType !== "link" && fileType !== "unknown"));
@@ -87,7 +112,6 @@ const isMaterialDownloadable = (material) => {
 const startDownload = (material, index = 0) =>
     new Promise((resolve) => {
         const fallbackName = `${(material.title || `material_${index + 1}`).replace(/[\\/:*?"<>|]+/g, "_")}.${(material.fileType || "bin").replace(/[^a-z0-9]/gi, "") || "bin"}`;
-
         chrome.downloads.download(
             {
                 url: material.url,
@@ -100,7 +124,6 @@ const startDownload = (material, index = 0) =>
                     resolve({ ok: true, method: "download" });
                     return;
                 }
-
                 chrome.tabs.create({ url: material.url }, (tab) => {
                     resolve({ ok: Boolean(tab?.id), method: tab?.id ? "tab" : "failed" });
                 });
@@ -141,19 +164,16 @@ const groupMaterials = (materials) => {
 
 const renderMaterialsList = (materials) => {
     refs.materialsList.innerHTML = "";
-
     const groups = groupMaterials(materials);
     const orderedGroups = [
         ["Lecture", groups.lecture],
         ["Lab", groups.lab],
         ["Other", groups.other]
     ];
-
     orderedGroups.forEach(([label, items]) => {
         const section = document.createElement("section");
         section.className = "material-group";
         section.innerHTML = `<h3>${label} (${items.length})</h3>`;
-
         if (!items.length) {
             const empty = document.createElement("p");
             empty.className = "subtle";
@@ -162,17 +182,14 @@ const renderMaterialsList = (materials) => {
             refs.materialsList.appendChild(section);
             return;
         }
-
         items.forEach((material, index) => {
             const item = document.createElement("article");
             item.className = "material-item";
             const canDownload = isMaterialDownloadable(material);
-
             item.innerHTML = `
                 <div class="row"><strong>${fileTypeIcon(material.fileType)} ${material.title}</strong></div>
                 <div class="material-meta">Type: ${material.type} · File: ${(material.fileType || "unknown").toUpperCase()}</div>
             `;
-
             const button = document.createElement("button");
             button.type = "button";
             button.textContent = canDownload ? "Download" : "View on Moodle";
@@ -182,15 +199,12 @@ const renderMaterialsList = (materials) => {
                     chrome.tabs.create({ url: material.url });
                     return;
                 }
-
                 const result = await startDownload(material, index);
                 button.textContent = result.ok ? (result.method === "download" ? "Downloaded" : "Opened") : "Failed";
             });
-
             item.appendChild(button);
             section.appendChild(item);
         });
-
         refs.materialsList.appendChild(section);
     });
 };
@@ -204,11 +218,9 @@ const renderCourseSelector = (courseIds) => {
         option.textContent = metrics.course_name || `Course ${courseId}`;
         refs.courseSelector.appendChild(option);
     });
-
     if (!currentCourseId || !courseIds.includes(currentCourseId)) {
         currentCourseId = courseIds[0] || null;
     }
-
     refs.courseSelector.value = currentCourseId || "";
 };
 
@@ -216,22 +228,17 @@ const renderDashboard = () => {
     const data = currentData;
     const courseIds = Object.keys(data?.metricsByCourse || {});
     const isEmpty = courseIds.length === 0;
-
     refs.lastUpdated.textContent = `Last refreshed: ${new Date().toLocaleString()}`;
     refs.emptyState.classList.toggle("hidden", !isEmpty);
     refs.dashboard.classList.toggle("hidden", isEmpty);
-
     if (isEmpty) {
         refs.downloadAllPdfsBtn.disabled = true;
         return;
     }
-
     renderCourseSelector(courseIds);
-
     const metrics = data.metricsByCourse?.[currentCourseId] || {};
     metrics.active_days_count = data.behavior?.active_days_count || metrics.active_days_count || 0;
     renderPerformance(metrics);
-
     const courseMaterials = getCourseMaterials(data, currentCourseId);
     const downloadableCount = courseMaterials.filter(isMaterialDownloadable).length;
     refs.downloadMeta.textContent = `Total materials: ${courseMaterials.length} · Download-ready: ${downloadableCount}`;
@@ -244,6 +251,30 @@ const refreshData = async () => {
     renderDashboard();
 };
 
+// Add Sync button dynamically
+const addSyncButton = () => {
+    const syncBtn = document.createElement("button");
+    syncBtn.id = "syncBackendBtn";
+    syncBtn.textContent = "Sync to Backend";
+    syncBtn.style.marginLeft = "10px";
+    refs.downloadJsonBtn.parentNode.insertBefore(syncBtn, refs.downloadJsonBtn.nextSibling);
+    syncBtn.addEventListener("click", async () => {
+        const data = await getStorageData();
+        if (data) {
+            syncBtn.disabled = true;
+            syncBtn.textContent = "Syncing...";
+            const ok = await syncToBackend(data);
+            syncBtn.textContent = ok ? "Synced!" : "Sync Failed";
+            setTimeout(() => {
+                syncBtn.disabled = false;
+                syncBtn.textContent = "Sync to Backend";
+            }, 2000);
+        } else {
+            alert("No data to sync.");
+        }
+    });
+};
+
 refs.courseSelector.addEventListener("change", () => {
     currentCourseId = refs.courseSelector.value;
     renderDashboard();
@@ -252,19 +283,16 @@ refs.courseSelector.addEventListener("change", () => {
 refs.downloadAllPdfsBtn.addEventListener("click", async () => {
     const materials = getCourseMaterials(currentData, currentCourseId).filter(isMaterialDownloadable);
     let successCount = 0;
-
     for (let i = 0; i < materials.length; i += 1) {
         const result = await startDownload(materials[i], i);
         if (result.ok) successCount += 1;
     }
-
     refs.downloadMeta.textContent = `Total materials: ${materials.length} · Started: ${successCount}`;
 });
 
 refs.downloadJsonBtn.addEventListener("click", async () => {
     const data = await getStorageData();
     if (!data) return;
-
     const payload = sanitizePayload(data);
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -285,4 +313,7 @@ refs.clearDataBtn.addEventListener("click", () => {
 });
 
 refs.refreshBtn.addEventListener("click", refreshData);
-document.addEventListener("DOMContentLoaded", refreshData);
+document.addEventListener("DOMContentLoaded", () => {
+    refreshData();
+    addSyncButton();
+});
