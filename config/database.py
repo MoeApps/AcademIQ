@@ -8,9 +8,13 @@ client = MongoClient(
 
 db = client.todo_db
 
-collection_name = db["todo_collection"]
+collection_name = db["AcademIQ_DB"]
 assignments_collection = db["assignments_collection"]
 sessions_collection = db["sessions_collection"]
 quizzes_collection = db["quizzes_collection"]
 courses_collection = db["courses_collection"]
 raw_moodle_payload_collection = db["raw_moodle_payload_collection"]
+
+# Fixed: use db instead of database
+feature_vectors_collection = db["feature_vectors"]
+ml_results_collection = db["ml_results"]

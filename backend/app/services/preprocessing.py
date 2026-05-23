@@ -4,7 +4,6 @@ from typing import List, Dict, Optional
 from datetime import datetime
 import numpy as np
 
-app = FastAPI()
 
 # ------------------------------
 # Request schema (raw payload)
@@ -166,22 +165,8 @@ final_grade = float(np.mean(final_grades)) if final_grades else 0.0
 
         "risk_cluster": None,   # NOT from Moodle (ML model output later)
 
-        "total_time_spent": total_time_spent
+        "total_time_spent": total_time_spent,
+
+        "late_submission_count": late_submission_count,
+        "procrastination_index": procrastination_index,
     }
-
-# ------------------------------
-# Ingest endpoint
-# ------------------------------
-@app.post("/ingest")
-async def ingest(raw_data: RawMoodlePayload):
-    try:
-        features = compute_features(raw_data)
-
-        return {
-            "status": "ok",
-            "student_id": raw_data.student_id,
-            "features": features
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
