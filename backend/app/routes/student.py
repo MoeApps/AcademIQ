@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import statistics
 
-from config.database import feature_vectors_collection
+from app.config.database import feature_vectors_collection
 
 router = APIRouter(prefix="/api/student", tags=["Student"])
 

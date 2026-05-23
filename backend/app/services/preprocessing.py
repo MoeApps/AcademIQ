@@ -1,172 +1,132 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Dict, Optional
 from datetime import datetime
+from typing import Dict, Any, List, Optional
 import numpy as np
+import re
+from app.services.preprocessing import compute_features
+
+def parse_moodle_date(date_str: str) -> Optional[datetime]:
+    """
+    Parse due dates like "Monday, 6 October 2025, 2:00 AM"
+    Returns datetime object or None if parsing fails.
+    """
+    if not date_str:
+        return None
+    # Remove weekday and extra spaces
+    cleaned = re.sub(r'^[A-Za-z]+, ', '', date_str)
+    try:
+        # Try with time
+        return datetime.strptime(cleaned, "%d %B %Y, %I:%M %p")
+    except ValueError:
+        try:
+            # Try without time (just date)
+            return datetime.strptime(cleaned, "%d %B %Y")
+        except ValueError:
+            return None
 
 
-# ------------------------------
-# Request schema (raw payload)
-# ------------------------------
-class Assignment(BaseModel):
-    title: str
-    due_date: Optional[str]
-    submitted: bool
-    grade: Optional[str]
+def compute_features(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extract ML-ready features from the actual Chrome extension JSON.
+    """
+    # ------------------------------
+    # Student info
+    student = payload.get("student", {})
+    student_id = student.get("student_id")
 
-class Quiz(BaseModel):
-    title: str
-    attempts: Optional[int]
-    score: Optional[float]
-    time_spent_ms: Optional[int]
+    # ------------------------------
+    # Behavior aggregates
+    behavior = payload.get("behavior", {})
+    total_time_spent_seconds = behavior.get("total_time_spent_on_moodle", 0)
+    active_days = behavior.get("active_days_count", 0)
+    all_clicks = behavior.get("click_count", 0)
 
-class Course(BaseModel):
-    course_id: str
-    name: str
-    visits: int
-    time_spent_ms: int
-    assignments: List[Assignment]
-    quizzes: List[Quiz]
-    final_grade: Optional[str]
+    # ------------------------------
+    # Courses data (list of course metrics)
+    courses_list = payload.get("courses", [])
+    # If courses is a list of dicts, we can compute averages/sums
+    total_visits = sum(c.get("total_visits", 0) for c in courses_list)
+    access_frequency = np.mean([c.get("total_visits", 0) for c in courses_list]) if courses_list else 0.0
+    material_clicks = sum(c.get("click_count", 0) for c in courses_list)  # could be refined
+    total_quiz_attempts = sum(c.get("quiz_attempts", 0) for c in courses_list)
+    total_assignment_submissions = sum(c.get("assignment_submissions", 0) for c in courses_list)
 
-class Session(BaseModel):
-    start: int
-    end: int
-    duration_ms: int
-
-class RawMoodlePayload(BaseModel):
-    student_id: Optional[str]
-    clicks: int
-    lastActivity: int
-    sessions: List[Session]
-    courses: Dict[str, Course]
-
-# ------------------------------
-# Feature computation (FINAL SCHEMA ALIGNED)
-# ------------------------------
-def compute_features(payload: RawMoodlePayload) -> dict:
-
-    courses = payload.courses or {}
-    sessions = payload.sessions or []
-
-    # --------------------------
-    # BASIC ACTIVITY FEATURES
-    # --------------------------
-    student_id = payload.student_id
-    all_clicks = payload.clicks or 0
-
-    total_time_spent = sum(s.duration_ms for s in sessions)
-
-    active_days = len(set(
-        datetime.fromtimestamp(s.start / 1000).date()
-        for s in sessions
-    ))
-
-    # --------------------------
-    # COURSE INTERACTION FEATURES
-    # --------------------------
-    access_frequency = float(np.mean([c.visits for c in courses.values()])) if courses else 0.0
-    material_clicks = sum(c.visits for c in courses.values()) if courses else 0
-
-    # --------------------------
-    # QUIZ FEATURES
-    # --------------------------
+    # ------------------------------
+    # Grades processing
+    grades = payload.get("grades", [])
     quiz_scores = []
-    quiz_attempts = 0
+    assignment_scores = []
 
-    for course in courses.values():
-        for q in course.quizzes:
-            quiz_attempts += q.attempts or 0
-            if q.score is not None:
-                quiz_scores.append(q.score)
+    for grade_item in grades:
+        item_type = grade_item.get("item_type", "")
+        percentage = grade_item.get("percentage")
+
+        if percentage is not None:
+            try:
+                score = float(percentage) / 100.0  # normalize to 0-1
+                if item_type == "quiz":
+                    quiz_scores.append(score)
+                elif item_type == "assignment":
+                    assignment_scores.append(score)
+            except (ValueError, TypeError):
+                pass
 
     avg_quiz_score = float(np.mean(quiz_scores)) if quiz_scores else 0.0
+    avg_assignment_score = float(np.mean(assignment_scores)) if assignment_scores else 0.0
 
-    # --------------------------
-# ASSIGNMENT FEATURES
-# --------------------------
-assignment_scores = []
-assignment_submissions = 0
-late_submission_count = 0
-total_assignments = 0
+    # ------------------------------
+    # Late submissions (from knowledge_base)
+    knowledge_base = payload.get("knowledge_base", {})
+    late_submission_count = 0
+    total_assignments = 0
+    now = datetime.now()
 
-now = datetime.now()
-
-for course in courses.values():
-    for a in course.assignments:
-        total_assignments += 1
-
-        # submission tracking
-        if a.submitted:
-            assignment_submissions += 1
-
-        # grade processing
-        if a.grade:
-            try:
-                val, max_val = a.grade.split("/")
-                assignment_scores.append(float(val) / float(max_val))
-            except:
-                pass
-
-        # late detection
-        if a.due_date and a.submitted:
-            try:
-                due = datetime.fromisoformat(a.due_date)
-                if due < now:
+    for course_name, course_data in knowledge_base.items():
+        assignments = course_data.get("assignment", [])
+        for assign in assignments:
+            total_assignments += 1
+            due_date_str = assign.get("due_date")
+            if due_date_str:
+                due = parse_moodle_date(due_date_str)
+                if due and due < now:
+                    # Consider it late if current time > due date (simplified)
+                    # You may want to check if submitted after due – but submission time not in this JSON
                     late_submission_count += 1
-            except:
-                pass
 
-# base metrics
-avg_assignment_score = float(np.mean(assignment_scores)) if assignment_scores else 0.0
+    # ------------------------------
+    # Procrastination index
+    if total_assignments > 0:
+        late_ratio = late_submission_count / total_assignments
+    else:
+        late_ratio = 0.0
+    procrastination_index = late_ratio * 10.0   # scale to 0-10
 
-# --------------------------
-# PROCRASTINATION INDEX
-# --------------------------
-if total_assignments > 0:
-    late_ratio = late_submission_count / total_assignments
-else:
-    late_ratio = 0.0
+    # ------------------------------
+    # Final grade (if any)
+    # Not directly available; could compute from course final grades if present
+    final_grade = 0.0   # placeholder
 
-# simple but effective behavioral proxy
-procrastination_index = float(late_ratio * 10)
-
-# --------------------------
-# FINAL GRADE
-# --------------------------
-final_grades = []
-for course in courses.values():
-    if course.final_grade:
-        try:
-            final_grades.append(float(course.final_grade.strip("%")) / 100)
-        except:
-            pass
-
-final_grade = float(np.mean(final_grades)) if final_grades else 0.0
-
-    # --------------------------
-    # OUTPUT (MATCHES YOUR SCHEMA EXACTLY)
-    # --------------------------
+    # ------------------------------
+    # Return exactly the 16 features you need (adjust as per your model)
     return {
         "student_id": student_id,
 
-        "all_clicks": all_clicks,
+        "total_time_spent": total_time_spent_seconds,   # seconds
         "active_days": active_days,
         "access_frequency": access_frequency,
+        "all_clicks": all_clicks,
         "material_clicks": material_clicks,
 
         "avg_quiz_score": avg_quiz_score,
-        "quiz_attempts": quiz_attempts,
+        "quiz_attempts": total_quiz_attempts,
 
         "avg_assignment_score": avg_assignment_score,
-        "assignment_submissions": assignment_submissions,
+        "assignment_submissions": total_assignment_submissions,
 
         "final_grade": final_grade,
 
-        "risk_cluster": None,   # NOT from Moodle (ML model output later)
-
-        "total_time_spent": total_time_spent,
-
         "late_submission_count": late_submission_count,
         "procrastination_index": procrastination_index,
+
+        # Add any other features your model expects
+        "risk_cluster": None,   # to be filled by ML later
     }
