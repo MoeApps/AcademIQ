@@ -1,5 +1,10 @@
 from pymongo import MongoClient
 
+from routes import moodle, student   # import both
+
+app.include_router(moodle.router)
+app.include_router(student.router)   # prefix is /api/student
+
 # Use a short server selection timeout so operations fail fast when MongoDB is unreachable.
 client = MongoClient(
     "mongodb+srv://khaledhsabllah:30538890@cluster0.zkhr2oz.mongodb.net/?appName=Cluster0",
