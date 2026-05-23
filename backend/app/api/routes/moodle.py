@@ -1,13 +1,9 @@
-from models.assignments import Assignment
-router = APIRouter()
-
-
-# Get all assignments
-@router.get("/assignments")
-async def get_assignments():
+# Get all raw moodle payloads
+@router.get("/raw-moodle-payloads")
+async def get_raw_moodle_payloads():
     try:
-        assignments = list_assignment_serial(assignments_collection.find())
-        return assignments
+        payloads = list_raw_moodle_payload_serial(raw_moodle_payload_collection.find())
+        return payloads
     except Exception as e:
         import traceback
         error_msg = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
@@ -15,42 +11,41 @@ async def get_assignments():
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-# Create assignment
-@router.post("/assignments")
-async def post_assignment(assignment: Assignment):
+# Create raw moodle payload
+@router.post("/raw-moodle-payloads")
+async def post_raw_moodle_payload(payload: RawMoodlePayload):
     try:
-        result = assignments_collection.insert_one(assignment.dict())
+        result = raw_moodle_payload_collection.insert_one(payload.dict())
         return {"inserted_id": str(result.inserted_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
 
 
-# Update assignment
-@router.put("/assignments/{id}")
-async def put_assignment(id: str, assignment: Assignment):
+# Update raw moodle payload
+@router.put("/raw-moodle-payloads/{id}")
+async def put_raw_moodle_payload(id: str, payload: RawMoodlePayload):
     try:
         oid = ObjectId(id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid id format")
     
     try:
-        result = assignments_collection.update_one({"_id": oid}, {"$set": assignment.dict()})
+        result = raw_moodle_payload_collection.update_one({"_id": oid}, {"$set": payload.dict()})
         return {"matched_count": result.matched_count, "modified_count": result.modified_count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
 
 
-# Delete assignment
-@router.delete("/assignments/{id}")
-async def delete_assignment(id: str):
+# Delete raw moodle payload
+@router.delete("/raw-moodle-payloads/{id}")
+async def delete_raw_moodle_payload(id: str):
     try:
         oid = ObjectId(id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid id format")
     
     try:
-        result = assignments_collection.delete_one({"_id": oid})
+        result = raw_moodle_payload_collection.delete_one({"_id": oid})
         return {"deleted_count": result.deleted_count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
-
