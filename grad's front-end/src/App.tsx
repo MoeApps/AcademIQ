@@ -10,6 +10,9 @@ import StudentDashboard from "./pages/StudentDashboard";
 import CoursePage from "./pages/CoursePage";
 import Schedule from "./pages/Schedule";
 import Grades from "./pages/Grades";
+import GeneratedQuizzes from "./pages/GeneratedQuizzes";
+import GeneratedNotes from "./pages/GeneratedNotes";
+import StudentInsights from "./pages/StudentInsights";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +31,9 @@ const App = () => (
           <Route path="/course/:courseId" element={<CoursePage />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/grades" element={<Grades />} />
+          <Route path="/generated-quizzes" element={<GeneratedQuizzes />} />
+          <Route path="/generated-notes" element={<GeneratedNotes />} />
+          <Route path="/student-insights" element={<StudentInsights />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

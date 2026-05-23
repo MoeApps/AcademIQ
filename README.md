@@ -100,4 +100,4 @@ This repo is intended for **academic demos**. Do not commit real **`.env`** secr
 
 ## Disclaimer
 
-For academic research and demonstration only.
+For academic research and demonstration only
