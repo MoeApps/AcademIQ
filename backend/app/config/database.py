@@ -17,7 +17,7 @@ except Exception as e:
 db = client.todo_db
 
 # Collections
-collection_name = db["todo_collection"]
+collection_name = db["AcademIQ"]
 assignments_collection = db["assignments_collection"]
 sessions_collection = db["sessions_collection"]
 quizzes_collection = db["quizzes_collection"]
@@ -26,3 +26,4 @@ raw_moodle_payload_collection = db["raw_moodle_payload_collection"]
 feature_vectors_collection = db["feature_vectors"]
 ml_results_collection = db["ml_results"]
 auth_sessions_collection = db["sessions"]   # for auth tokens
+user = db["user"]

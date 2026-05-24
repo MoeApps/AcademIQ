@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from typing import Dict, Any
+from app.auth import get_current_user
 
 from app.config.database import feature_vectors_collection, ml_results_collection
 from app.services.performance_predict import predict_performance

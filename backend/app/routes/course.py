@@ -8,6 +8,7 @@ from models.raw_moodle_payload import RawMoodlePayload
 from config.database import collection_name, assignments_collection, sessions_collection, quizzes_collection, courses_collection, raw_moodle_payload_collection
 from schema.schemas import list_serial, list_assignment_serial, list_session_serial, list_quiz_serial, list_course_serial, list_raw_moodle_payload_serial
 from bson import ObjectId
+from app.auth import get_current_user
 
 router = APIRouter()
 

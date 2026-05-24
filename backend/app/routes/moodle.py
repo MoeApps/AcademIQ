@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from bson import ObjectId
 from datetime import datetime
 from typing import Dict, Any
+from app.auth import get_current_user
 
 from app.config.database import raw_moodle_payload_collection, feature_vectors_collection
 from app.schema.schemas import list_raw_moodle_payload_serial
