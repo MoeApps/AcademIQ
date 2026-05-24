@@ -1,5 +1,3 @@
-from app.schema.schemas import list_raw_moodle_payload_serial
-
 def individual_serial(todo)->dict:
     return {
         "id": str(todo.get("_id", "")),

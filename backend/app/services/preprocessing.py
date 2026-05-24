@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 import numpy as np
 import re
-from app.services.preprocessing import compute_features
+
 
 def parse_moodle_date(date_str: str) -> Optional[datetime]:
     """

@@ -3,7 +3,6 @@
 import sys
 from pathlib import Path
 
-# Add the current directory to sys.path so Python finds the 'app' package
 sys.path.insert(0, str(Path(__file__).parent))
 
 from fastapi import FastAPI
@@ -11,21 +10,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
 
 from app.config.database import client
-from app.routes import moodle, assignments, course, quizzes, todos
-# from app.routes import student   # uncomment when student.py is ready
+from app.routes import moodle  # only import the working route
+# from app.routes import assignments, course, quizzes, todos  # commented out for now
 
 app = FastAPI(title="AcademIQ Backend", version="1.0")
 
-# CORS for Chrome extension
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # for development; restrict later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Health check endpoint
 @app.get("/")
 def root():
     return {"message": "AcademIQ Backend running. Go to /docs for API docs."}
@@ -38,13 +35,15 @@ def health():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database unreachable: {str(e)}")
 
-# Include routers (no prefix – adjust if needed)
-app.include_router(moodle.router)       # /raw-moodle-payloads
-app.include_router(assignments.router)  # /assignments
-app.include_router(course.router)       # /courses
-app.include_router(quizzes.router)      # /quizzes
-app.include_router(todos.router)        # /todos
-# app.include_router(student.router)    # /api/student/...
+# Only include the moodle router for now
+app.include_router(moodle.router)   # /raw-moodle-payloads
+
+# The following routers are commented out because they depend on missing models
+# app.include_router(assignments.router)
+# app.include_router(course.router)
+# app.include_router(quizzes.router)
+# app.include_router(todos.router)
+# app.include_router(student.router)   # uncomment when student.py is ready
 
 if __name__ == "__main__":
     import uvicorn
