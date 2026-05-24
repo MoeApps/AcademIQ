@@ -1,25 +1,28 @@
 from pymongo import MongoClient
+from pymongo.server_api import ServerApi
+import sys
 
-from routes import moodle, student   # import both
+# SRV connection string (replace with your actual password)
+uri = "mongodb+srv://mohamed2106404_db:UINS6z2r6TpUiTNS@cluster0.hcvs2st.mongodb.net/?appName=Cluster0"
 
-app.include_router(moodle.router)
-app.include_router(student.router)   # prefix is /api/student
-
-# Use a short server selection timeout so operations fail fast when MongoDB is unreachable.
-client = MongoClient(
-    "mongodb+srv://khaledhsabllah:30538890@cluster0.zkhr2oz.mongodb.net/?appName=Cluster0",
-    serverSelectionTimeoutMS=2000,
-)
+try:
+    client = MongoClient(uri, server_api=ServerApi('1'))
+    # Force a connection to verify
+    client.admin.command('ping')
+    print("✅ Connected to MongoDB Atlas!")
+except Exception as e:
+    print(f"❌ Connection failed: {e}")
+    sys.exit(1)   # Stop the app if DB is unreachable
 
 db = client.todo_db
 
-collection_name = db["AcademIQ_DB"]
+# Collections
+collection_name = db["todo_collection"]
 assignments_collection = db["assignments_collection"]
 sessions_collection = db["sessions_collection"]
 quizzes_collection = db["quizzes_collection"]
 courses_collection = db["courses_collection"]
 raw_moodle_payload_collection = db["raw_moodle_payload_collection"]
-
-# Fixed: use db instead of database
 feature_vectors_collection = db["feature_vectors"]
 ml_results_collection = db["ml_results"]
+auth_sessions_collection = db["sessions"]   # for auth tokens

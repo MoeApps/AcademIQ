@@ -3,7 +3,6 @@ from bson import ObjectId
 from datetime import datetime
 from typing import Dict, Any
 
-# Your database collections (adjust imports to match your project)
 from app.config.database import raw_moodle_payload_collection, feature_vectors_collection
 from schema.schemas import list_raw_moodle_payload_serial
 from app.services.preprocessing import compute_features
