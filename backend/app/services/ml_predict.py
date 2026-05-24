@@ -5,15 +5,16 @@ import numpy as np
 import os
 from typing import Dict, Any
 
-# Paths to your trained models (adjust if models folder is outside backend)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MODELS_DIR = os.path.join(BASE_DIR, "models")   # goes up to AcademIQ/models
+# Get the absolute path to AcademIQ root (two levels up from this file)
+# Current file: AcademIQ/backend/app/services/ml_predict.py
+# Go up: services -> app -> backend -> AcademIQ
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
 
 MODEL_PATH = os.path.join(MODELS_DIR, "burnout_model.pkl")
 SCALER_PATH = os.path.join(MODELS_DIR, "riskScaler.pkl")
 
-# Feature order – must exactly match the order used during training.
-# These are the 16 features we computed in preprocessing.py.
+# Feature order – adjust to match your trained model
 FEATURE_ORDER = [
     "total_time_spent",
     "active_days",
@@ -24,67 +25,55 @@ FEATURE_ORDER = [
     "quiz_attempts",
     "avg_assignment_score",
     "assignment_submissions",
-    "final_grade",
+  #  "final_grade",
     "late_submission_count",
     "procrastination_index",
 ]
 
 def load_model_and_scaler():
-    """Load the model and scaler; raise exception if missing."""
     try:
         model = joblib.load(MODEL_PATH)
-        scaler = joblib.load(SCALER_PATH)
-        print("✅ ML model and scaler loaded successfully")
-        return model, scaler
+        print(f"✅ Model loaded from {MODEL_PATH}")
+    except FileNotFoundError:
+        raise RuntimeError(f"Model file not found at {MODEL_PATH}")
     except Exception as e:
-        print(f"❌ Failed to load ML model: {e}")
-        return None, None
+        raise RuntimeError(f"Failed to load model: {e}")
 
-# Load at module import (once)
+    try:
+        scaler = joblib.load(SCALER_PATH)
+        print(f"✅ Scaler loaded from {SCALER_PATH}")
+    except FileNotFoundError:
+        print(f"⚠️ Scaler not found at {SCALER_PATH}. Proceeding without scaling.")
+        scaler = None
+    except Exception as e:
+        print(f"⚠️ Could not load scaler: {e}. Proceeding without scaling.")
+        scaler = None
+
+    return model, scaler
+
 model, scaler = load_model_and_scaler()
 
 def predict_features(features_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Accepts a dictionary of features (as stored in feature_vectors_collection),
-    orders them, scales, and runs the model. Returns predictions.
-    """
-    if model is None or scaler is None:
-        raise RuntimeError("ML model not loaded. Check paths.")
+    if model is None:
+        raise RuntimeError("Model not loaded.")
 
-    # Extract values in the correct order
-    try:
-        X = np.array([[features_dict.get(key, 0.0) for key in FEATURE_ORDER]])
-    except KeyError as e:
-        raise ValueError(f"Missing feature in input: {e}")
+    X = np.array([[features_dict.get(key, 0.0) for key in FEATURE_ORDER]])
+    if scaler is not None:
+        X = scaler.transform(X)
 
-    # Scale features (if your scaler expects 2D array)
-    X_scaled = scaler.transform(X)
+    risk_cluster = int(model.predict(X)[0])
 
-    # Predict (adjust based on your model's output)
-    # Assume classification: 0 = low risk, 1 = medium, 2 = high
-    risk_cluster = int(model.predict(X_scaled)[0])
-
-    # If you have probability predictions:
-    # proba = model.predict_proba(X_scaled)[0]
-    # pass_probability = proba[1]  # if binary classification
-
-    # For demonstration, derive pass_probability from risk_cluster (you can replace)
-    if risk_cluster == 0:
-        pass_probability = 0.85
-        risk_level = "LOW"
-        engagement_score = 0.7
-    elif risk_cluster == 1:
-        pass_probability = 0.55
-        risk_level = "MEDIUM"
-        engagement_score = 0.5
-    else:
-        pass_probability = 0.25
-        risk_level = "HIGH"
-        engagement_score = 0.3
+    # Map to human-readable outputs (adjust as needed)
+    risk_map = {
+        0: {"level": "LOW", "pass_prob": 0.85, "engagement": 0.7},
+        1: {"level": "MEDIUM", "pass_prob": 0.55, "engagement": 0.5},
+        2: {"level": "HIGH", "pass_prob": 0.25, "engagement": 0.3},
+    }
+    result = risk_map.get(risk_cluster, {"level": "UNKNOWN", "pass_prob": 0.5, "engagement": 0.5})
 
     return {
         "risk_cluster": risk_cluster,
-        "risk_level": risk_level,
-        "pass_probability": round(pass_probability, 4),
-        "engagement_score": round(engagement_score, 4)
+        "risk_level": result["level"],
+        "pass_probability": result["pass_prob"],
+        "engagement_score": result["engagement"]
     }
