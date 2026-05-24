@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
 
 from app.config.database import client
-from app.routes import moodle, student   # student router is now ready
+from app.routes import moodle, student, performance   # student router is now ready
 
 app = FastAPI(title="AcademIQ Backend", version="1.0")
 
@@ -37,6 +37,7 @@ def health():
 # Include routers – make sure no extra spaces before these lines
 app.include_router(moodle.router)    # /raw-moodle-payloads
 app.include_router(student.router)   # /api/student/insights/...
+app.include_router(performance.router) 
 
 if __name__ == "__main__":
     import uvicorn
