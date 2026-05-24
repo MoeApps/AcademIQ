@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
 
+from .model_loader import load_artifacts
 from app.config.database import client
 from app.routes import moodle  # only import the working route
 # from app.routes import assignments, course, quizzes, todos  # commented out for now
