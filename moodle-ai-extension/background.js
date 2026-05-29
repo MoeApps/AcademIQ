@@ -5,6 +5,13 @@ const activeTabs = new Map();
 const pageViewsByTab = new Map();
 let storageWriteQueue = Promise.resolve();
 
+
+const token = (await chrome.storage.local.get('authToken')).authToken;
+fetch(url, {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+
+
 const defaultData = () => ({
     student: {
         student_id: null,

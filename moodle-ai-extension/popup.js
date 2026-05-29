@@ -1,5 +1,5 @@
 const STORAGE_KEY = "moodleData";
-const BACKEND_URL = "http://localhost:8000/raw-moodle-payloads"; // Change to your actual backend URL
+const BACKEND_URL = "http://localhost:8000/raw-moodle-payloads"; 
 
 const refs = {
     refreshBtn: document.getElementById("refreshBtn"),
@@ -33,7 +33,7 @@ const sanitizePayload = (data) => {
         learning_materials: (learning_materials || []).map(({ _key, ...material }) => material)
     };
 };
-
+chrome.storage.local.set({ authToken: token });
 const getStorageData = () =>
     new Promise((resolve) => {
         chrome.storage.local.get(STORAGE_KEY, (res) => {
