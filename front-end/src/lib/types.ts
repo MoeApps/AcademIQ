@@ -15,6 +15,50 @@ export interface Student {
   fullName: string;
 }
 
+/** Account roles. Drives redirects and route protection. */
+export type Role = "admin" | "student";
+
+/**
+ * An authenticated AcademIQ account (admin or student). Mirrors the backend's
+ * `serialize_user` output — note the password hash is never sent to the client.
+ */
+export interface AuthUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role: Role;
+  /** Moodle linkage identifiers (primary mapping keys; may be absent). */
+  moodleUserId?: string | null;
+  studentId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+/** Result of a successful sign-in. */
+export interface AuthResult {
+  user: AuthUser;
+  role: Role;
+  /** Session token (also set as an httpOnly cookie by the backend). */
+  token: string;
+}
+
+/** Payload for an admin creating or editing a user. */
+export interface UserInput {
+  fullName: string;
+  email: string;
+  role: Role;
+  moodleUserId?: string | null;
+  studentId?: string | null;
+  /** Optional on create; if omitted the backend generates a secure password. */
+  password?: string;
+}
+
+/** Admin mutation result; `generatedPassword` is present only when generated. */
+export interface UserMutationResult {
+  user: AuthUser;
+  generatedPassword?: string;
+}
+
 export interface Course {
   id: string;
   name: string;

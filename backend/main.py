@@ -9,18 +9,36 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
 
-from app.config.database import client
-from app.routes import moodle, student, performance   # student router is now ready
+from app.config.database import client, ensure_indexes
+# Core routers (no heavy ML/data-science deps).
+from app.routes import moodle, auth, admin
 
 app = FastAPI(title="AcademIQ Backend", version="1.0")
 
+# NOTE: cookie-based sessions require explicit origins (not "*") when
+# allow_credentials is True. Configure ALLOWED_ORIGINS in production; the
+# localhost defaults cover the Next.js dev server.
+import os
+
+_allowed = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+allowed_origins = [o.strip() for o in _allowed.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _startup():
+    # Create auth/identity indexes once the app boots.
+    try:
+        ensure_indexes()
+    except Exception as exc:
+        print(f"⚠️  Could not ensure indexes: {exc}")
 
 @app.get("/")
 def root():
@@ -34,10 +52,22 @@ def health():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database unreachable: {str(e)}")
 
-# Include routers – make sure no extra spaces before these lines
+# Core routers — always available.
+app.include_router(auth.router)      # /api/auth/login, /logout, /me
+app.include_router(admin.router)     # /api/admin/users (admin-only)
 app.include_router(moodle.router)    # /raw-moodle-payloads
-app.include_router(student.router)   # /api/student/insights/...
-app.include_router(performance.router) 
+
+# ML routers are optional: they depend on joblib/scikit-learn/shap/tensorflow,
+# which may not be installed (or have no wheels on very new Python versions).
+# Mount them only if their imports succeed, so a missing ML dependency never
+# takes down auth/admin/ingest.
+try:
+    from app.routes import student, performance
+    app.include_router(student.router)        # /api/student/insights/...
+    app.include_router(performance.router)
+    print("[OK] ML routes mounted.")
+except Exception as exc:
+    print(f"[WARN] ML routes NOT mounted (missing deps): {exc}")
 
 if __name__ == "__main__":
     import uvicorn

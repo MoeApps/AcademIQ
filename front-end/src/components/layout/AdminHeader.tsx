@@ -2,18 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { GraduationCap, LogOut } from "lucide-react";
+import { GraduationCap, LogOut, Shield } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/performance", label: "Performance" },
-  { href: "/quiz", label: "Quiz Generation" },
+  { href: "/admin", label: "Overview" },
+  { href: "/admin/users", label: "Users" },
 ];
 
-export function AppHeader() {
+export function AdminHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useUser();
@@ -28,17 +27,23 @@ export function AppHeader() {
       <div className="container flex h-16 items-center justify-between gap-4">
         <div className="flex items-center gap-8">
           <Link
-            href="/dashboard"
+            href="/admin"
             className="flex items-center gap-2 transition-opacity hover:opacity-80"
           >
             <GraduationCap className="h-7 w-7 text-primary" />
             <span className="text-lg font-bold text-foreground">AcademIQ</span>
+            <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+              <Shield className="h-3 w-3" />
+              Admin
+            </span>
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">
             {NAV.map((item) => {
               const active =
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
+                item.href === "/admin"
+                  ? pathname === "/admin"
+                  : pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}

@@ -28,7 +28,7 @@ const FEATURE_LINKS = [
 ];
 
 export default function DashboardPage() {
-  const { student } = useUser();
+  const { user } = useUser();
   const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const firstName = student?.fullName.split(" ")[0] ?? "there";
+  const firstName = user?.fullName.split(" ")[0] ?? "there";
 
   return (
     <div className="space-y-8">

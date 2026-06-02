@@ -1,11 +1,14 @@
 import type {
+  AuthUser,
   Course,
   CourseInsights,
   DashboardData,
   GeneratedQuiz,
   LearningMaterial,
   PerformanceAnalysis,
+  Role,
   Student,
+  UserInput,
 } from "./types";
 import { recommendationFor } from "./recommendations";
 
@@ -19,6 +22,141 @@ export const mockStudent: Student = {
   username: "khaled.21",
   fullName: "khaled hsaballah",
 };
+
+/* -------------------------------------------------------------------------- */
+/* Auth + admin mock state                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * In-memory user store so the admin dashboard is fully interactive in mock
+ * mode (create/edit/delete/reset persist for the session). Mirrors the
+ * backend's serialized user shape.
+ */
+const nowIso = () => new Date().toISOString();
+
+let mockUsers: AuthUser[] = [
+  {
+    id: "u_admin",
+    fullName: "AcademIQ Admin",
+    email: "admin@academiq.local",
+    role: "admin",
+    moodleUserId: null,
+    studentId: null,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  },
+  {
+    id: "u_1042",
+    fullName: "Khaled Hsaballah",
+    email: "khaled@academiq.local",
+    role: "student",
+    moodleUserId: "55012",
+    studentId: "S20210042",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  },
+  {
+    id: "u_2087",
+    fullName: "Mariam Adel",
+    email: "mariam@academiq.local",
+    role: "student",
+    moodleUserId: "55087",
+    studentId: "S20210087",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  },
+  {
+    id: "u_3301",
+    fullName: "Omar Saleh",
+    email: "omar@academiq.local",
+    role: "student",
+    moodleUserId: "55133",
+    studentId: "S20200133",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  },
+];
+
+let mockIdCounter = 1000;
+
+/** Mock sign-in: admins are any user whose stored role is "admin". */
+export function getMockAuthUser(email: string): AuthUser {
+  const normalized = email.trim().toLowerCase();
+  const match = mockUsers.find((u) => u.email.toLowerCase() === normalized);
+  if (match) return match;
+  // Unknown emails resolve to a default student so the demo flow still works.
+  return {
+    id: "u_guest",
+    fullName: email.split("@")[0] || "Student",
+    email: normalized,
+    role: "student",
+    moodleUserId: null,
+    studentId: null,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+}
+
+export function getMockUsers(search?: string): AuthUser[] {
+  if (!search) return [...mockUsers];
+  const q = search.trim().toLowerCase();
+  return mockUsers.filter((u) =>
+    [u.fullName, u.email, u.studentId ?? "", u.moodleUserId ?? ""]
+      .join(" ")
+      .toLowerCase()
+      .includes(q),
+  );
+}
+
+export function createMockUser(input: UserInput): {
+  user: AuthUser;
+  generatedPassword?: string;
+} {
+  const user: AuthUser = {
+    id: `u_${(mockIdCounter += 1)}`,
+    fullName: input.fullName,
+    email: input.email.trim().toLowerCase(),
+    role: input.role,
+    moodleUserId: input.moodleUserId ?? null,
+    studentId: input.studentId ?? null,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  mockUsers = [user, ...mockUsers];
+  return {
+    user,
+    generatedPassword: input.password ? undefined : "Mock@Pass1234",
+  };
+}
+
+export function updateMockUser(
+  id: string,
+  input: Partial<UserInput>,
+): AuthUser {
+  mockUsers = mockUsers.map((u) =>
+    u.id === id
+      ? {
+          ...u,
+          fullName: input.fullName ?? u.fullName,
+          email: input.email?.trim().toLowerCase() ?? u.email,
+          role: (input.role as Role) ?? u.role,
+          moodleUserId:
+            input.moodleUserId !== undefined ? input.moodleUserId : u.moodleUserId,
+          studentId: input.studentId !== undefined ? input.studentId : u.studentId,
+          updatedAt: nowIso(),
+        }
+      : u,
+  );
+  return mockUsers.find((u) => u.id === id)!;
+}
+
+export function deleteMockUser(id: string): void {
+  mockUsers = mockUsers.filter((u) => u.id !== id);
+}
+
+export function resetMockPassword(): string {
+  return "Mock@Reset1234";
+}
 
 export const mockCourses: Course[] = [
   { id: "c_cs204", name: "Data Structures & Algorithms", code: "CS204" },

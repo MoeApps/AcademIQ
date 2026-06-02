@@ -1,0 +1,10 @@
+# AcademIQ backend dependencies
+fastapi
+uvicorn[standard]
+pymongo>=3.12,<5
+certifi
+pydantic[email]>=2
+python-jose[cryptography]
+bcrypt
+python-dotenv
+numpy

@@ -74,23 +74,27 @@ def compute_features(payload: Dict[str, Any]) -> Dict[str, Any]:
     avg_assignment_score = float(np.mean(assignment_scores)) if assignment_scores else 0.0
 
     # ------------------------------
-    # Late submissions (from knowledge_base)
-    knowledge_base = payload.get("knowledge_base", {})
+    # Late submissions — derived from the canonical materials instead of the
+    # (now removed) duplicated knowledge_base. An assignment is any material
+    # tagged/typed "assignment"; it's "late" if its due date has passed. Works
+    # with both the new single `materials` array and legacy payload shapes.
+    from app.services.moodle_ingest import materials_from_payload
+
     late_submission_count = 0
     total_assignments = 0
     now = datetime.now()
 
-    for course_name, course_data in knowledge_base.items():
-        assignments = course_data.get("assignment", [])
-        for assign in assignments:
-            total_assignments += 1
-            due_date_str = assign.get("due_date")
-            if due_date_str:
-                due = parse_moodle_date(due_date_str)
-                if due and due < now:
-                    # Consider it late if current time > due date (simplified)
-                    # You may want to check if submitted after due – but submission time not in this JSON
-                    late_submission_count += 1
+    for material in materials_from_payload(payload):
+        tags = {str(t).lower() for t in (material.get("semantic_tags") or [])}
+        mtype = str(material.get("material_type") or material.get("type") or "").lower()
+        if "assignment" not in tags and mtype != "assignment":
+            continue
+        total_assignments += 1
+        due_date_str = material.get("due_date")
+        if due_date_str:
+            due = parse_moodle_date(due_date_str)
+            if due and due < now:
+                late_submission_count += 1
 
     # ------------------------------
     # Procrastination index

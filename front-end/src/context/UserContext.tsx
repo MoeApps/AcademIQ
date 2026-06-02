@@ -8,17 +8,19 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import type { Student } from "@/lib/types";
+import { api } from "@/lib/api";
+import type { AuthUser, Role } from "@/lib/types";
 
-const STORAGE_KEY = "academiq.student";
+const STORAGE_KEY = "academiq.user";
 
 /** Subscribe that never fires — used only to read a server/client-split flag. */
 const noopSubscribe = () => () => {};
 
 /**
- * The persisted session lives in localStorage (the backend owns real auth).
- * We expose it through useSyncExternalStore so reads are hydration-safe and
- * stay in sync across tabs without a setState-in-effect.
+ * The persisted session lives in localStorage for UX (who's signed in + their
+ * role), while the backend owns the real session via an httpOnly cookie. We
+ * expose it through useSyncExternalStore so reads are hydration-safe and stay
+ * in sync across tabs without a setState-in-effect.
  */
 const listeners = new Set<() => void>();
 
@@ -48,11 +50,13 @@ function getServerSnapshot(): string | null {
 }
 
 interface UserContextValue {
-  student: Student | null;
+  user: AuthUser | null;
+  role: Role | null;
   /** False until the first client mount, so guards don't redirect early. */
   isReady: boolean;
   isAuthenticated: boolean;
-  signIn: (student: Student) => void;
+  isAdmin: boolean;
+  signIn: (user: AuthUser) => void;
   signOut: () => void;
 }
 
@@ -68,34 +72,38 @@ export function UserProvider({ children }: { children: ReactNode }) {
     () => false,
   );
 
-  const student = useMemo<Student | null>(() => {
+  const user = useMemo<AuthUser | null>(() => {
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as Student;
+      return JSON.parse(raw) as AuthUser;
     } catch {
       return null;
     }
   }, [raw]);
 
-  const signIn = useCallback((next: Student) => {
+  const signIn = useCallback((next: AuthUser) => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     notify();
   }, []);
 
   const signOut = useCallback(() => {
+    // Clear the backend session (best-effort) then the local snapshot.
+    void api.signOut();
     window.localStorage.removeItem(STORAGE_KEY);
     notify();
   }, []);
 
   const value = useMemo<UserContextValue>(
     () => ({
-      student,
+      user,
+      role: user?.role ?? null,
       isReady,
-      isAuthenticated: student !== null,
+      isAuthenticated: user !== null,
+      isAdmin: user?.role === "admin",
       signIn,
       signOut,
     }),
-    [student, isReady, signIn, signOut],
+    [user, isReady, signIn, signOut],
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

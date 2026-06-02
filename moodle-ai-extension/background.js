@@ -5,21 +5,18 @@ const activeTabs = new Map();
 const pageViewsByTab = new Map();
 let storageWriteQueue = Promise.resolve();
 
-
-const token = (await chrome.storage.local.get('authToken')).authToken;
-fetch(url, {
-  headers: { 'Authorization': `Bearer ${token}` }
-});
-
-
 const defaultData = () => ({
     student: {
+        // Identity used by AcademIQ to map Moodle data to the right account.
+        // Priority: moodle_user_id, then student_id (see backend provisioning).
+        moodle_user_id: null,
         student_id: null,
+        full_name: null,
+        email: null,
         program: null,
         enrollment_year: null
     },
     metricsByCourse: {},
-    materialsByCourse: {},
     courses: [], // export flexibity (ashan aamel export brahty)
     behavior: { // bgahez lel ml models
         total_time_spent_on_moodle: 0,
@@ -31,8 +28,11 @@ const defaultData = () => ({
     },
     events: [],
     grades: [],
-    learning_materials: [],
-    knowledge_base: {},
+    // Single canonical list of materials (deduped by course_id + material id).
+    // Categorisation (lecture/quiz/assignment/…) lives in each material's
+    // `semantic_tags`/`type` — we no longer keep duplicate per-category or
+    // per-course copies (learning_materials / materialsByCourse / knowledge_base).
+    materials: [],
     _meta: {
         activeDays: [],
         hourCounts: {},
@@ -62,7 +62,7 @@ const getStoredData = async () => {
     const data = result[STORAGE_KEY] || defaultData();
 
     if (!data.metricsByCourse) data.metricsByCourse = {};
-    if (!data.materialsByCourse) data.materialsByCourse = {};
+    if (!Array.isArray(data.materials)) data.materials = [];
 
     return data;
 };
@@ -203,63 +203,33 @@ const mergeGrades = (data, grades) => {
     });
 };
 
-const buildKnowledgeBase = (materials = []) => {
-    const knowledgeBase = {};
-
-    materials.forEach((material) => {
-        const courseName = material.course_name || `Course ${material.course_id || "Unknown"}`;
-        if (!knowledgeBase[courseName]) {
-            knowledgeBase[courseName] = {};
-        }
-
-        const tags = Array.isArray(material.semantic_tags) && material.semantic_tags.length ? material.semantic_tags : ["general"];
-        tags.forEach((tag) => {
-            if (!knowledgeBase[courseName][tag]) {
-                knowledgeBase[courseName][tag] = [];
-            }
-            knowledgeBase[courseName][tag].push(material);
-        });
-    });
-
-    return knowledgeBase;
-};
-
+// Merge scraped materials into the SINGLE canonical `data.materials` array,
+// deduped by course_id + material id. No per-course or per-category copies are
+// created — categorisation is derived later from each material's metadata
+// (`semantic_tags` / `type`), so a material is stored exactly once.
 const mergeMaterials = (data, materials) => {
+    if (!Array.isArray(data.materials)) data.materials = [];
+
     materials.forEach((material) => {
-        const courseId = material.courseId || material.course_id;
+        const courseId = material.courseId || material.course_id || null;
         const materialId = material.id || material.material_id || material.url || material.title || "unknown";
-        const key = `${courseId || "unknown"}-${materialId}-${material.url || "no-url"}`;
+        const key = `${courseId || "unknown"}-${materialId}`;
 
-        if (!data.learning_materials.some((existing) => existing._key === key)) {
-            data.learning_materials.push({ ...material, course_id: courseId, material_id: materialId, _key: key });
-        }
+        const existingIndex = data.materials.findIndex((m) => m._key === key);
+        const record = {
+            ...material,
+            course_id: courseId,
+            material_id: materialId,
+            _key: key
+        };
 
-        if (!courseId) return;
-        if (!data.materialsByCourse[courseId]) {
-            data.materialsByCourse[courseId] = [];
-        }
-
-        const existsInCourse = data.materialsByCourse[courseId].some((existing) => {
-            const existingId = existing.id || existing.material_id || existing.url;
-            return `${courseId}-${existingId || "unknown"}-${existing.url || "no-url"}` === key;
-        });
-
-        if (!existsInCourse) {
-            data.materialsByCourse[courseId].push({
-                id: materialId,
-                courseId,
-                title: material.title || "Untitled Material",
-                type: material.type || "unknown",
-                url: material.url || null,
-                fileType: material.fileType || material.file_type || "unknown",
-                sourcePage: material.sourcePage || null,
-                downloadable: Boolean(material.downloadable),
-                resolvedUrl: material.resolvedUrl || null
-            });
+        if (existingIndex === -1) {
+            data.materials.push(record);
+        } else {
+            // Refresh in place (e.g. a later page resolved more metadata).
+            data.materials[existingIndex] = { ...data.materials[existingIndex], ...record };
         }
     });
-
-    data.knowledge_base = buildKnowledgeBase(data.learning_materials);
 };
 
 const finalizeActiveTab = async (tabId, endTime) => { // time gets tracked by tap msh ay haga etfathet w khalas
@@ -453,10 +423,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "identity") {
         (async () => {
             await queueStorageUpdate(async (data) => {
+                const prev = data.student || {};
+                const next = message.payload || {};
+                // Merge so an identifier discovered on one page isn't lost on
+                // the next page that happens not to expose it.
                 data.student = {
-                    student_id: message.payload.student_id || data.student.student_id,
-                    program: message.payload.program || data.student.program,
-                    enrollment_year: message.payload.enrollment_year || data.student.enrollment_year
+                    moodle_user_id: next.moodle_user_id || prev.moodle_user_id || null,
+                    student_id: next.student_id || prev.student_id || null,
+                    full_name: next.full_name || prev.full_name || null,
+                    email: next.email || prev.email || null,
+                    program: next.program || prev.program || null,
+                    enrollment_year: next.enrollment_year || prev.enrollment_year || null
                 };
             });
             sendResponse({ status: "ok" });

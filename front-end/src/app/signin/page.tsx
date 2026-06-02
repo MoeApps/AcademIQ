@@ -14,22 +14,22 @@ export default function SignInPage() {
   const router = useRouter();
   const { signIn } = useUser();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({ username: "", password: "" });
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({
-    username: "",
+    email: "",
     password: "",
     general: "",
   });
 
   const validateForm = () => {
-    const next = { username: "", password: "", general: "" };
+    const next = { email: "", password: "", general: "" };
     let valid = true;
 
-    if (!formData.username.trim()) {
-      next.username = "Username is required";
+    if (!formData.email.trim()) {
+      next.email = "Email is required";
       valid = false;
-    } else if (formData.username.trim().length < 3) {
-      next.username = "Username must be at least 3 characters";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      next.email = "Enter a valid email address";
       valid = false;
     }
 
@@ -50,17 +50,18 @@ export default function SignInPage() {
     if (!validateForm()) return;
 
     setIsLoading(true);
-    setErrors({ username: "", password: "", general: "" });
+    setErrors({ email: "", password: "", general: "" });
 
     try {
-      // Credentials are validated against Moodle records by the backend.
-      const { student } = await api.signIn(formData.username, formData.password);
-      signIn(student);
-      router.push("/dashboard");
+      // Credentials are validated by the backend against AcademIQ accounts.
+      const { user } = await api.signIn(formData.email, formData.password);
+      signIn(user);
+      // Role-based redirect: admins manage users, students see their dashboard.
+      router.push(user.role === "admin" ? "/admin" : "/dashboard");
     } catch {
       setErrors((prev) => ({
         ...prev,
-        general: "Invalid username or password. Please try again.",
+        general: "Invalid email or password. Please try again.",
       }));
       setIsLoading(false);
     }
@@ -92,7 +93,7 @@ export default function SignInPage() {
             Sign In
           </h1>
           <p className="mb-8 text-center text-sm text-muted-foreground">
-            Use your Moodle credentials. AcademIQ does not host its own accounts.
+            Sign in with your AcademIQ email and password.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -103,20 +104,20 @@ export default function SignInPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="username"
-                name="username"
-                type="text"
-                value={formData.username}
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
                 onChange={handleChange}
-                placeholder="Enter your Moodle username"
-                className={errors.username ? "border-destructive focus-visible:ring-destructive" : ""}
+                placeholder="you@university.edu"
+                className={errors.email ? "border-destructive focus-visible:ring-destructive" : ""}
                 disabled={isLoading}
-                autoComplete="username"
+                autoComplete="email"
               />
-              {errors.username && (
-                <p className="text-sm text-destructive">{errors.username}</p>
+              {errors.email && (
+                <p className="text-sm text-destructive">{errors.email}</p>
               )}
             </div>
 

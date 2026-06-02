@@ -20,20 +20,20 @@ let currentCourseId = null;
 
 const sanitizePayload = (data) => {
     if (!data) return null;
-    const { _meta, events, grades, learning_materials, courses, behavior, student, knowledge_base, metricsByCourse, materialsByCourse } = data;
+    const { events, grades, materials, courses, behavior, student, metricsByCourse } = data;
     return {
         student,
         courses,
         behavior,
-        knowledge_base,
         metricsByCourse,
-        materialsByCourse,
         events: (events || []).map(({ _id, ...event }) => event),
         grades: (grades || []).map(({ _key, ...grade }) => grade),
-        learning_materials: (learning_materials || []).map(({ _key, ...material }) => material)
+        // Single canonical materials array — no duplicated learning_materials /
+        // materialsByCourse / knowledge_base structures are sent any more.
+        materials: (materials || []).map(({ _key, ...material }) => material)
     };
 };
-chrome.storage.local.set({ authToken: token });
+
 const getStorageData = () =>
     new Promise((resolve) => {
         chrome.storage.local.get(STORAGE_KEY, (res) => {
@@ -86,12 +86,11 @@ const normalizeMaterial = (material, courseId) => ({
 });
 
 const getCourseMaterials = (data, courseId) => {
-    const fromScoped = Array.isArray(data?.materialsByCourse?.[courseId]) ? data.materialsByCourse[courseId].map((m) => normalizeMaterial(m, courseId)) : [];
-    if (fromScoped.length) return fromScoped;
-    const fromLegacy = Array.isArray(data?.learning_materials)
-        ? data.learning_materials.filter((item) => (item.courseId || item.course_id) === courseId).map((m) => normalizeMaterial(m, courseId))
-        : [];
-    return fromLegacy;
+    // Read from the single canonical materials array, filtered by course.
+    const all = Array.isArray(data?.materials) ? data.materials : [];
+    return all
+        .filter((item) => (item.courseId || item.course_id) === courseId)
+        .map((m) => normalizeMaterial(m, courseId));
 };
 
 const getMaterialDownloadLabel = (material) => {
@@ -275,6 +274,37 @@ const addSyncButton = () => {
     });
 };
 
+// Add "Scan all courses" button — asks the content script on the active Moodle
+// tab to fetch + scrape every enrolled course (not just the open one).
+const addScanAllButton = () => {
+    const btn = document.createElement("button");
+    btn.id = "scanAllBtn";
+    btn.textContent = "Scan all courses";
+    btn.style.marginLeft = "10px";
+    refs.refreshBtn.parentNode.insertBefore(btn, refs.refreshBtn.nextSibling);
+    btn.addEventListener("click", () => {
+        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+            if (!tab?.id) return;
+            btn.disabled = true;
+            btn.textContent = "Scanning all courses...";
+            chrome.tabs.sendMessage(tab.id, { type: "scrape_all_courses" }, (response) => {
+                if (chrome.runtime.lastError || !response) {
+                    btn.textContent = "Open a Moodle tab first";
+                } else if (response.status === "done") {
+                    btn.textContent = `Scanned ${response.scraped}/${response.courses} courses`;
+                    refreshData();
+                } else {
+                    btn.textContent = "Scan failed";
+                }
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = "Scan all courses";
+                }, 2500);
+            });
+        });
+    });
+};
+
 refs.courseSelector.addEventListener("change", () => {
     currentCourseId = refs.courseSelector.value;
     renderDashboard();
@@ -316,4 +346,5 @@ refs.refreshBtn.addEventListener("click", refreshData);
 document.addEventListener("DOMContentLoaded", () => {
     refreshData();
     addSyncButton();
+    addScanAllButton();
 });
