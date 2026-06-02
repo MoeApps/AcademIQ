@@ -56,5 +56,25 @@ def get(course_id: str, material_id: str) -> Optional[Dict[str, Any]]:
     )
 
 
+def set_content(course_id: str, material_id: str, text: str) -> bool:
+    """Store extracted text for a material (used for quiz generation)."""
+    result = course_materials_collection.update_one(
+        {"course_id": str(course_id), "material_id": str(material_id)},
+        {"$set": {"content_text": text, "content_chars": len(text or "")}},
+        upsert=True,
+    )
+    return result.matched_count > 0 or result.upserted_id is not None
+
+
+def get_content(course_id: str, material_ids: List[str]) -> str:
+    """Concatenate stored text for the given materials in a course."""
+    ids = [str(m) for m in material_ids]
+    cursor = course_materials_collection.find(
+        {"course_id": str(course_id), "material_id": {"$in": ids}, "content_text": {"$exists": True}},
+        {"content_text": 1},
+    )
+    return "\n\n".join(d.get("content_text", "") for d in cursor)
+
+
 def count() -> int:
     return course_materials_collection.count_documents({})

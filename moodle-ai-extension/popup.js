@@ -1,5 +1,6 @@
 const STORAGE_KEY = "moodleData";
-const BACKEND_URL = "http://localhost:8000/raw-moodle-payloads"; 
+const BACKEND_URL = "http://localhost:8000/raw-moodle-payloads";
+const CONTENT_URL = BACKEND_URL.replace(/\/raw-moodle-payloads$/, "/materials/content");
 
 const refs = {
     refreshBtn: document.getElementById("refreshBtn"),
@@ -305,6 +306,60 @@ const addScanAllButton = () => {
     });
 };
 
+// Upload the current course's PDF materials' content to the backend so quizzes
+// can be generated from them. The extension holds the Moodle session, so it can
+// fetch the files; the backend extracts the text.
+const arrayBufferToBase64 = (buf) => {
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+};
+
+const uploadMaterialContent = async (material) => {
+    const res = await fetch(material.url, { credentials: "include" });
+    if (!res.ok) return false;
+    const b64 = arrayBufferToBase64(await res.arrayBuffer());
+    const post = await fetch(CONTENT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            course_id: currentCourseId,
+            material_id: material.id,
+            content_base64: b64,
+        }),
+    });
+    return post.ok;
+};
+
+const addUploadQuizButton = () => {
+    const btn = document.createElement("button");
+    btn.id = "uploadQuizBtn";
+    btn.textContent = "Upload PDFs for quiz";
+    btn.style.marginLeft = "10px";
+    refs.downloadAllPdfsBtn.parentNode.insertBefore(btn, refs.downloadAllPdfsBtn.nextSibling);
+    btn.addEventListener("click", async () => {
+        const pdfs = getCourseMaterials(currentData, currentCourseId)
+            .filter((m) => (m.fileType || "").toLowerCase() === "pdf" && m.url);
+        if (!pdfs.length) {
+            btn.textContent = "No PDFs in this course";
+            setTimeout(() => (btn.textContent = "Upload PDFs for quiz"), 2500);
+            return;
+        }
+        btn.disabled = true;
+        let ok = 0;
+        for (let i = 0; i < pdfs.length; i += 1) {
+            btn.textContent = `Uploading ${i + 1}/${pdfs.length}...`;
+            try { if (await uploadMaterialContent(pdfs[i])) ok += 1; } catch (_e) { /* skip */ }
+        }
+        btn.textContent = `Uploaded ${ok}/${pdfs.length} PDFs`;
+        setTimeout(() => { btn.disabled = false; btn.textContent = "Upload PDFs for quiz"; }, 3000);
+    });
+};
+
 refs.courseSelector.addEventListener("change", () => {
     currentCourseId = refs.courseSelector.value;
     renderDashboard();
@@ -347,4 +402,5 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshData();
     addSyncButton();
     addScanAllButton();
+    addUploadQuizButton();
 });

@@ -9,7 +9,9 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv*/
 backend/.venv/
+backend/.venv*/
 backend/backups/
 
 # --- Node / Next.js ---

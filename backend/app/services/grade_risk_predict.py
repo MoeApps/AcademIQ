@@ -8,8 +8,9 @@ import os
 from pathlib import Path
 from typing import Dict, Any
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MODEL_DIR = os.path.join(BASE_DIR, "models", "grade_risk_model")
+# repo root = .../backend/app/services/grade_risk_predict.py -> up 4 levels
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+MODEL_DIR = os.path.join(BASE_DIR, "models", "grade_Risk_Model")
 
 # Add MODEL_DIR to path for inference import
 if str(MODEL_DIR) not in sys.path:

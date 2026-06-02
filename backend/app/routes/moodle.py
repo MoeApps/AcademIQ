@@ -3,13 +3,42 @@ from bson import ObjectId
 from datetime import datetime
 from typing import Dict, Any
 
+import base64
+
 from app.config.database import raw_moodle_payload_collection, feature_vectors_collection
 from app.schema.schemas import list_raw_moodle_payload_serial
 from app.services.preprocessing import compute_features
 from app.services.moodle_ingest import normalize_payload, slim_payload
 from app.services.user_provisioning import extract_identity, resolve_or_create_user
+from app.repositories import material_repository
+from app.services import quiz_gen
 
 router = APIRouter()
+
+
+@router.post("/materials/content")
+async def upload_material_content(payload: Dict[str, Any]):
+    """
+    Open endpoint (same trust model as /raw-moodle-payloads): the extension —
+    which holds the Moodle session — fetches a material's PDF and uploads its
+    bytes here. We extract the text (PyPDF2) and store it so quizzes can be
+    generated from it later.
+
+    Body: { course_id, material_id, content_base64 }
+    """
+    course_id = str(payload.get("course_id") or "").strip()
+    material_id = str(payload.get("material_id") or "").strip()
+    b64 = payload.get("content_base64")
+    if not course_id or not material_id or not b64:
+        raise HTTPException(status_code=400, detail="course_id, material_id, content_base64 required")
+    try:
+        data = base64.b64decode(b64)
+        text = quiz_gen.extract_pdf_text(data)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not read PDF: {exc}")
+
+    material_repository.set_content(course_id, material_id, text)
+    return {"status": "stored", "material_id": material_id, "chars": len(text)}
 
 
 # GET all raw moodle payloads

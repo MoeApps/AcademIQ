@@ -8,3 +8,18 @@ python-jose[cryptography]
 bcrypt
 python-dotenv
 numpy
+
+# --- ML stack (performance model: insights/predictions) ---
+# Needs Python <= 3.13 (no wheels on 3.14 yet). Used by app/services/
+# performance_predict.py; if absent, the API falls back to heuristics.
+scikit-learn
+shap
+joblib
+pandas
+lightgbm
+tensorflow-cpu   # grade/risk model (works on Python 3.13)
+
+# --- Quiz generation (rule-based: ai/quiz_generator-main) ---
+nltk
+PyPDF2
+python-pptx
