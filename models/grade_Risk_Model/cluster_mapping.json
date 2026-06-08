@@ -1,0 +1,12 @@
+{
+  "risk_labels": {
+    "2": "High Risk",
+    "0": "Medium Risk",
+    "1": "Low Risk"
+  },
+  "label_to_int": {
+    "High Risk": 0,
+    "Medium Risk": 1,
+    "Low Risk": 2
+  }
+}

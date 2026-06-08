@@ -1,0 +1,18 @@
+# Keep the backend image small: only backend/ + models/ are needed.
+front-end/
+moodle-ai-extension/
+Datasets/
+Documents/
+ai/
+schema/
+config/
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/.next/
+**/.git/
+*.zip
+*.ipynb
+.env
+**/.env.local

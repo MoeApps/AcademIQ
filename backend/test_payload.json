@@ -1,0 +1,80 @@
+{
+  "student": {
+    "moodle_user_id": "99901",
+    "student_id": "stu_phase1_test",
+    "full_name": "Phase One Test Student",
+    "email": "phase1.test@academiq.local",
+    "program": "CS",
+    "enrollment_year": 2024
+  },
+  "courses": [
+    {
+      "course_id": "668",
+      "course_name": "Course Machine Learning - 25F",
+      "click_count": 45,
+      "total_visits": 12,
+      "total_time_spent_seconds": 7200,
+      "active_days_count": 8,
+      "quiz_attempts": 2,
+      "assignment_submissions": 1,
+      "number_of_quizzes_viewed": 3,
+      "number_of_assignments_viewed": 2,
+      "number_of_resources_clicked": 5
+    }
+  ],
+  "behavior": {
+    "click_count": 45,
+    "active_days_count": 8,
+    "total_time_spent_on_moodle": 7200,
+    "all_clicks": 45,
+    "active_days": 8,
+    "total_time_spent": 7200,
+    "access_frequency": 1.5
+  },
+  "metricsByCourse": {
+    "668": {
+      "course_name": "Course Machine Learning - 25F",
+      "quiz_attempts": 2,
+      "assignment_submissions": 1,
+      "total_time_spent_seconds": 7200,
+      "number_of_quizzes_viewed": 3,
+      "number_of_assignments_viewed": 2
+    }
+  },
+  "grades": [
+    {
+      "course_id": "668",
+      "item_type": "quiz",
+      "item_name": "Quiz 1",
+      "percentage": 78,
+      "grade": 78,
+      "max_grade": 100
+    },
+    {
+      "course_id": "668",
+      "item_type": "assignment",
+      "item_name": "Assignment 1",
+      "percentage": 85,
+      "grade": 85,
+      "max_grade": 100
+    }
+  ],
+  "materials": [
+    {
+      "course_id": "668",
+      "material_id": "mat_001",
+      "title": "Lecture 1 - Introduction",
+      "material_type": "lecture",
+      "semantic_tags": ["lecture"],
+      "file_type": "pdf"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "evt_phase1_1",
+      "course_id": "668",
+      "event_type": "page_view",
+      "timestamp": "2026-06-01T10:00:00.000Z"
+    }
+  ]
+}

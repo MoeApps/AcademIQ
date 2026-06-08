@@ -1,0 +1,170 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { GraduationCap, Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+export default function SignInPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({ studentId: "", password: "" });
+  const [errors, setErrors] = useState({
+    studentId: "",
+    password: "",
+    general: "",
+  });
+
+  useEffect(() => {
+    if (searchParams.get("expired") === "1") {
+      setErrors((prev) => ({
+        ...prev,
+        general: "Your session has expired. Please sign in again.",
+      }));
+    }
+  }, [searchParams]);
+
+  const validateForm = () => {
+    const next = { studentId: "", password: "", general: "" };
+    let valid = true;
+
+    if (!formData.studentId.trim()) {
+      next.studentId = "Student ID is required";
+      valid = false;
+    }
+
+    if (!formData.password) {
+      next.password = "Password is required";
+      valid = false;
+    }
+
+    setErrors(next);
+    return valid;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    setIsLoading(true);
+    setErrors({ studentId: "", password: "", general: "" });
+
+    try {
+      await api.login(formData.studentId.trim(), formData.password);
+      router.push("/dashboard");
+    } catch (err) {
+      setErrors((prev) => ({
+        ...prev,
+        general:
+          err instanceof Error ? err.message : "Invalid login",
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name as keyof typeof errors]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-auth-start to-auth-end p-4">
+      <div className="w-full max-w-md">
+        <div className="rounded-2xl bg-card p-8 shadow-2xl">
+          <div className="mb-8 flex justify-center">
+            <Link
+              href="/"
+              className="flex items-center gap-2 transition-opacity hover:opacity-80"
+            >
+              <GraduationCap className="h-8 w-8 text-primary" />
+              <span className="text-xl font-bold text-foreground">AcademIQ</span>
+            </Link>
+          </div>
+
+          <h1 className="mb-2 text-center text-2xl font-bold text-primary">
+            Sign In
+          </h1>
+          <p className="mb-8 text-center text-sm text-muted-foreground">
+            Sign in with your Student ID and password.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {errors.general && (
+              <div className="rounded-lg bg-destructive/10 p-3 text-center text-sm text-destructive">
+                {errors.general}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="studentId">Student ID</Label>
+              <Input
+                id="studentId"
+                name="studentId"
+                type="text"
+                value={formData.studentId}
+                onChange={handleChange}
+                placeholder="student1"
+                className={
+                  errors.studentId
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : ""
+                }
+                disabled={isLoading}
+                autoComplete="username"
+              />
+              {errors.studentId && (
+                <p className="text-sm text-destructive">{errors.studentId}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Enter your password"
+                className={
+                  errors.password
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : ""
+                }
+                disabled={isLoading}
+                autoComplete="current-password"
+              />
+              {errors.password && (
+                <p className="text-sm text-destructive">{errors.password}</p>
+              )}
+            </div>
+
+            <Button type="submit" size="lg" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </Button>
+          </form>
+
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            Demo: student1 / password123 or student2 / pass456
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

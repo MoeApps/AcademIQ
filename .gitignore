@@ -1,0 +1,26 @@
+# --- Secrets / environment ---
+backend/.env
+front-end/.env.local
+front-end/.env*.local
+*.local.env
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv*/
+backend/.venv/
+backend/.venv*/
+backend/backups/
+
+# --- Node / Next.js ---
+node_modules/
+front-end/node_modules/
+.next/
+front-end/.next/
+out/
+
+# --- Misc ---
+.DS_Store
+*.log

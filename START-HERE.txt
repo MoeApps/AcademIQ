@@ -1,0 +1,107 @@
+================================================================================
+                         ACADEMIQ - START HERE
+================================================================================
+
+Your project folder:
+  C:\Users\Seif Sameh\Downloads\AcademIQ-main-extracted\AcademIQ-main
+
+All 4 phases are DONE and tested. Follow the steps below to use the app.
+
+
+--------------------------------------------------------------------------------
+STEP 1 - START THE BACKEND (the brain of the app)
+--------------------------------------------------------------------------------
+
+  Double-click:  START-BACKEND.bat
+
+  Wait until you see:  "Application startup complete"
+
+  DO NOT close this window.
+
+
+--------------------------------------------------------------------------------
+STEP 2 - START THE WEBSITE
+--------------------------------------------------------------------------------
+
+  Double-click:  START-FRONTEND.bat
+
+  Wait until you see:  "Ready" and "http://localhost:3000"
+
+  DO NOT close this window.
+
+
+--------------------------------------------------------------------------------
+STEP 3 - OPEN THE WEBSITE IN YOUR BROWSER
+--------------------------------------------------------------------------------
+
+  Go to:  http://localhost:3000
+
+
+--------------------------------------------------------------------------------
+STEP 4 - SIGN IN
+--------------------------------------------------------------------------------
+
+  ADMIN account (manage users):
+    Email:    admin@academiq.local
+    Password: Admin@12345
+
+  STUDENT test account (see dashboard + AI):
+    Email:    phase1.test@academiq.local
+    Password: StudentTest@123
+
+
+--------------------------------------------------------------------------------
+STEP 5 - CHECK EVERYTHING WORKS
+--------------------------------------------------------------------------------
+
+  Double-click:  CHECK-EVERYTHING.bat
+
+  You should see:  "All critical checks passed."
+
+
+--------------------------------------------------------------------------------
+WHAT EACH PAGE DOES
+--------------------------------------------------------------------------------
+
+  Dashboard     - Your study stats + burnout risk (AI)
+  Performance   - Predicted grade + tips to improve
+  Insights      - Risk factors the AI found
+  Quiz          - Auto-generated quiz from course materials
+  Admin         - Add/remove users (admin only)
+
+
+--------------------------------------------------------------------------------
+CHROME EXTENSION (connect Moodle to AcademIQ)
+--------------------------------------------------------------------------------
+
+  1. Open Chrome
+  2. Go to:  chrome://extensions
+  3. Turn ON "Developer mode" (top right)
+  4. Click "Load unpacked"
+  5. Select folder:  moodle-ai-extension  (inside this project)
+  6. Open your Moodle course page
+  7. Click the AcademIQ extension icon
+  8. Click "Sync to AcademIQ"
+
+
+--------------------------------------------------------------------------------
+ONE WARNING (not a problem)
+--------------------------------------------------------------------------------
+
+  TensorFlow could not install on your Windows PC.
+  The grade neural network uses a fallback instead.
+  Burnout + Performance AI still work fully.
+
+
+--------------------------------------------------------------------------------
+TO PUT THE APP ONLINE LATER (Phase 4 - optional)
+--------------------------------------------------------------------------------
+
+  Frontend -> Vercel (free): upload the front-end folder
+  Backend  -> Hugging Face Spaces (free): upload backend + Dockerfile
+  Database -> MongoDB Atlas (already connected)
+
+  See:  Documents\DEPLOYMENT.md  for details.
+
+
+================================================================================

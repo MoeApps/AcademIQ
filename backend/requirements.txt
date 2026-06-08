@@ -1,0 +1,26 @@
+# AcademIQ backend dependencies
+fastapi
+uvicorn[standard]
+pymongo>=3.12,<5
+certifi
+pydantic[email]>=2
+python-jose[cryptography]
+bcrypt>=4.0.1,<5
+passlib[bcrypt]>=1.7.4
+python-dotenv
+numpy
+
+# --- ML stack (performance model: insights/predictions) ---
+# Needs Python <= 3.13 (no wheels on 3.14 yet). Used by app/services/
+# performance_predict.py; if absent, the API falls back to heuristics.
+scikit-learn
+shap
+joblib
+pandas
+lightgbm
+tensorflow-cpu   # grade/risk model (works on Python 3.13)
+
+# --- Quiz generation (rule-based: ai/quiz_generator-main) ---
+nltk
+PyPDF2
+python-pptx
