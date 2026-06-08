@@ -1,0 +1,17 @@
+# Full AcademIQ backend — auth deploy deps + ML + quiz generation
+# Use locally when you need insights, performance models, and quiz features.
+
+-r requirements.txt
+
+# --- ML stack ---
+scikit-learn
+shap
+joblib
+pandas
+lightgbm
+tensorflow-cpu
+
+# --- Quiz generation ---
+nltk
+PyPDF2
+python-pptx

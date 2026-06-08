@@ -34,10 +34,19 @@ import type {
  * Authorization: Bearer headers on protected requests.
  */
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
-const USE_MOCK =
-  process.env.NEXT_PUBLIC_USE_MOCK === "true" || BASE_URL === "";
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
+
+/** Resolve API base URL from env — no localhost fallback in production builds. */
+function getApiBaseUrl(): string {
+  if (USE_MOCK) return "";
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (!raw) {
+    throw new Error(
+      "NEXT_PUBLIC_API_BASE_URL is not set. Copy front-end/.env.example to .env.local.",
+    );
+  }
+  return raw.replace(/\/$/, "");
+}
 
 export const ACCESS_TOKEN_KEY = "access_token";
 export const STUDENT_ID_KEY = "student_id";
@@ -130,7 +139,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers,
     credentials: "include",

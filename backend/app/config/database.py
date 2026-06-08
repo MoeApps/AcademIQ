@@ -6,9 +6,10 @@ from pymongo.server_api import ServerApi
 
 from app.config.settings import MONGODB_URI, MONGODB_DB_NAME
 
-# Connection string + database name now come from the environment
-# (see app/config/settings.py); the previous hard-coded values remain the
-# fallback so nothing breaks if no .env is present.
+if not MONGODB_URI:
+    print("[ERROR] MONGODB_URI is not set. Copy backend/.env.example to backend/.env")
+    sys.exit(1)
+
 uri = MONGODB_URI
 
 # Use certifi's CA bundle for the TLS handshake. Atlas connections on Windows/
