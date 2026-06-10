@@ -2,9 +2,10 @@
 import os
 import sys
 import argparse
-import random  # Add this import
+import random
 from quiz_generator import QuizGenerator
-from exporter import QuizExporter
+from exporter import QuizExporter, MongoDBExporter
+
 
 def main():
     parser = argparse.ArgumentParser(description='Generate professional management quizzes from PDF/PPT')
@@ -13,6 +14,14 @@ def main():
                        help='Output file (default: professional_quiz.txt)')
     parser.add_argument('-n', '--questions', type=int, default=10,
                        help='Number of questions (default: 10)')
+    parser.add_argument('--mongodb', action='store_true',
+                       help='Also export the generated quiz to MongoDB')
+    parser.add_argument('--mongo-uri', type=str, default=None,
+                       help='MongoDB connection URI (or set MONGO_URI env var)')
+    parser.add_argument('--mongo-db', type=str, default='management_quizzes',
+                       help='MongoDB database name')
+    parser.add_argument('--mongo-collection', type=str, default='generated_quizzes',
+                       help='MongoDB collection name')
     
     args = parser.parse_args()
     
@@ -45,12 +54,31 @@ def main():
         
         print(f"✅ Generated {len(questions)} professional questions")
         
-        # Export
+        # Export to TXT
         exporter = QuizExporter()
         output_path = args.output if args.output.endswith('.txt') else args.output + '.txt'
         exporter.export_to_txt(questions, output_path)
         
         print(f"\n💾 Quiz saved to: {output_path}")
+        
+        # NEW: MongoDB export (optional)
+        if args.mongodb:
+            print("\n🗄️  Saving quiz to MongoDB...")
+            try:
+                metadata = {
+                    "source_file": args.input_file,
+                    "num_questions_requested": args.questions,
+                    "generator": "Professional Management Quiz Generator"
+                }
+                MongoDBExporter.export_to_mongodb(
+                    questions,
+                    db_name=args.mongo_db,
+                    collection_name=args.mongo_collection,
+                    mongo_uri=args.mongo_uri,
+                    metadata=metadata
+                )
+            except Exception as e:
+                print(f"⚠️  MongoDB export skipped: {e}")
         
         # Show sample
         if questions:
@@ -75,6 +103,7 @@ def main():
         print(f"❌ Error: {str(e)}")
         import traceback
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()
