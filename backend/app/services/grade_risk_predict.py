@@ -7,6 +7,7 @@ import sys
 import os
 from pathlib import Path
 from typing import Dict, Any
+from app.config.system_registry import mark_component
 
 # repo root = .../backend/app/services/grade_risk_predict.py -> up 4 levels
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -27,6 +28,18 @@ try:
     print("✅ TensorFlow loaded – grade/risk model available")
 except ImportError as e:
     print(f"⚠️ TensorFlow not available (grade/risk model disabled): {e}")
+
+    mark_component(
+        "grade_prediction_model",
+        False,
+        f"TensorFlow or grade/risk inference module unavailable: {e}",
+    )
+
+    mark_component(
+        "risk_cluster_model",
+        False,
+        f"TensorFlow or grade/risk inference module unavailable: {e}",
+    )
 
 def get_predictor():
     global _predictor

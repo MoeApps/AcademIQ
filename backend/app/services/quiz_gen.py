@@ -15,6 +15,7 @@ import io
 import os
 import sys
 from typing import Any, Dict, List
+from app.config.system_registry import mark_component
 
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 _QUIZ_DIR = os.path.join(_REPO, "ai", "quiz_generator-main")
@@ -50,8 +51,18 @@ def _ensure_ready() -> None:
 def available() -> bool:
     try:
         _ensure_ready()
+        mark_component(
+            "quiz_generator",
+            True,
+            "Quiz generator service is available.",
+        )
         return True
-    except Exception:
+    except Exception as exc:
+        mark_component(
+            "quiz_generator",
+            False,
+            f"Quiz generator is not available: {exc}",
+        )
         return False
 
 

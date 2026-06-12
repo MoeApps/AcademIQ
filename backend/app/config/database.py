@@ -36,6 +36,7 @@ feature_vectors_collection = db["feature_vectors"]
 ml_results_collection = db["ml_results"]
 auth_sessions_collection = db["sessions"]   # for auth session tokens
 
+
 # AcademIQ user accounts (admins + students). `users_collection` is the
 # canonical name used throughout the new auth/admin code; `user` is kept as a
 # backwards-compatible alias for any older references.
@@ -47,6 +48,7 @@ user = users_collection
 course_materials_collection = db["course_materials"]   # canonical materials
 student_metrics_collection = db["student_metrics"]     # per-(user,course) metrics
 student_events_collection = db["student_events"]       # per-user event stream
+system_events_collection = db["system_events"]
 
 
 def _ensure_unique_partial(field: str, name: str) -> None:

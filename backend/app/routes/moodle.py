@@ -5,7 +5,7 @@ from typing import Dict, Any
 
 import base64
 
-from app.config.database import raw_moodle_payload_collection, feature_vectors_collection
+from app.config.database import raw_moodle_payload_collection, feature_vectors_collection, system_events_collection
 from app.schema.schemas import list_raw_moodle_payload_serial
 from app.services.preprocessing import compute_features
 from app.services.moodle_ingest import normalize_payload, slim_payload
@@ -114,7 +114,20 @@ async def post_raw_moodle_payload(payload: Dict[str, Any], background_tasks: Bac
             },
             upsert=True,
         )
-
+        # for sys confirm. confirms that moodle data is synced
+        system_events_collection.update_one(
+    {"type": "extension_sync"},
+    {
+        "$set": {
+            "type": "extension_sync",
+            "last_sync_at": now,
+            "status": "success",
+            "academiq_user_id": academiq_user_id,
+            "student_id": student_id or features.get("student_id"),
+        }
+    },
+    upsert=True,
+)
         return {
             "inserted_id": raw_id,
             "status": "features_computed",
