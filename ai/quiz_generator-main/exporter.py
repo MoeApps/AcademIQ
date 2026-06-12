@@ -1,6 +1,7 @@
 # exporter.py
+import os
 import random
-from typing import List
+from typing import List, Optional
 from data_structures import QuizQuestion
 
 class QuizExporter:
@@ -90,3 +91,91 @@ class QuizExporter:
             f.write(f"  Easy (<0.5): {easy} questions\n")
             f.write(f"  Medium (0.5-0.7): {medium} questions\n")
             f.write(f"  Hard (>0.7): {hard} questions\n")
+
+
+# =============================================================================
+# NEW: MongoDB Exporter
+# =============================================================================
+
+try:
+    from pymongo import MongoClient
+except ImportError:
+    MongoClient = None
+
+from datetime import datetime
+
+
+class MongoDBExporter:
+    """Export structured quiz questions to MongoDB for persistence, search, and analytics"""
+    
+    @staticmethod
+    def export_to_mongodb(
+        questions: List[QuizQuestion],
+        db_name: str = "management_quizzes",
+        collection_name: str = "generated_quizzes",
+        mongo_uri: Optional[str] = None,
+        metadata: Optional[dict] = None
+    ) -> Optional[str]:
+        """
+        Save the generated quiz to MongoDB.
+        Returns the inserted document _id (as string) on success, None on failure.
+        """
+        if MongoClient is None:
+            print("❌ pymongo is not installed.")
+            print("   → Run: pip install pymongo")
+            print("   → Or re-run: python setup.py")
+            return None
+
+        if mongo_uri is None:
+            mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+
+        try:
+            client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+            client.admin.command('ping')
+
+            db = client[db_name]
+            collection = db[collection_name]
+
+            quiz_doc = {
+                "created_at": datetime.utcnow(),
+                "total_questions": len(questions),
+                "multiple_choice_count": sum(1 for q in questions if q.question_type == "multiple_choice"),
+                "short_answer_count": sum(1 for q in questions if q.question_type == "short_answer"),
+                "average_difficulty": round(
+                    sum(q.difficulty for q in questions) / len(questions), 2
+                ) if questions else 0.0,
+                "questions": [
+                    {
+                        "question_num": idx + 1,
+                        "question": q.question,
+                        "question_type": q.question_type,
+                        "options": q.options if q.question_type == "multiple_choice" else [],
+                        "correct_answer": q.correct_answer,
+                        "context": (q.context or "")[:600],
+                        "difficulty": round(q.difficulty, 2),
+                        "keywords": q.keywords or []
+                    }
+                    for idx, q in enumerate(questions)
+                ],
+                "metadata": metadata or {}
+            }
+
+            result = collection.insert_one(quiz_doc)
+            doc_id = str(result.inserted_id)
+
+            print(f"✅ Successfully saved quiz to MongoDB")
+            print(f"   • Database   : {db_name}")
+            print(f"   • Collection : {collection_name}")
+            print(f"   • Document ID: {doc_id}")
+            print(f"   • Questions  : {len(questions)}")
+
+            client.close()
+            return doc_id
+
+        except Exception as e:
+            print(f"❌ MongoDB export failed: {e}")
+            print("   Common fixes:")
+            print("   - Start MongoDB locally or use MongoDB Atlas")
+            print("   - Set MONGO_URI environment variable")
+            print("   - For Atlas use: mongodb+srv://user:password@cluster...")
+            return None

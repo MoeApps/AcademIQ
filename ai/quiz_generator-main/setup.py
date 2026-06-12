@@ -14,7 +14,8 @@ def install_dependencies():
         'scikit-learn',
         'rank_bm25',
         'networkx',
-        'pillow'
+        'pillow',
+        'pymongo'
     ]
     
     for package in dependencies:
