@@ -11,6 +11,8 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/performance", label: "Performance" },
   { href: "/quiz", label: "Quiz Generation" },
+  { href: "/system-status", label: "System Status" },
+
 ];
 
 export function AppHeader() {

@@ -192,3 +192,121 @@ export const api = {
     });
   },
 };
+export type SystemComponentStatus = {
+  connected?: boolean;
+  loaded?: boolean;
+  available?: boolean;
+  status: string;
+  details: string;
+  updated_at?: string | null;
+};
+
+export type ExtensionSyncStatus = SystemComponentStatus & {
+  last_sync_at?: string | null;
+  student_id?: string | null;
+  academiq_user_id?: string | null;
+};
+
+export type SystemStatusResponse = {
+  backend: SystemComponentStatus;
+  mongodb: SystemComponentStatus;
+  extension_sync: ExtensionSyncStatus;
+  ai: {
+    performance_model: SystemComponentStatus;
+    shap_explainer: SystemComponentStatus;
+    grade_prediction_model: SystemComponentStatus;
+    risk_cluster_model: SystemComponentStatus;
+    quiz_generator: SystemComponentStatus;
+  };
+  runtime: {
+    frontend_mode: string;
+    mock_mode: boolean;
+    heuristic_fallback: boolean;
+    checked_at: string;
+  };
+  registry?: Record<string, SystemComponentStatus>;
+};
+
+export async function getSystemStatus(): Promise<SystemStatusResponse> {
+  if (USE_MOCK) {
+    const now = new Date().toISOString();
+
+    return delay({
+      backend: {
+        connected: false,
+        loaded: false,
+        available: false,
+        status: "Mock Mode",
+        details: "Frontend is currently using mock data.",
+        updated_at: now,
+      },
+      mongodb: {
+        connected: false,
+        loaded: false,
+        available: false,
+        status: "Not checked",
+        details: "MongoDB is not checked while mock mode is enabled.",
+        updated_at: now,
+      },
+      extension_sync: {
+        connected: false,
+        loaded: false,
+        available: false,
+        status: "No live sync",
+        details: "Extension sync is not checked while mock mode is enabled.",
+        last_sync_at: null,
+        updated_at: now,
+      },
+      ai: {
+        performance_model: {
+          connected: false,
+          loaded: false,
+          available: false,
+          status: "Mock Mode",
+          details: "Live performance model is not being used.",
+          updated_at: now,
+        },
+        shap_explainer: {
+          connected: false,
+          loaded: false,
+          available: false,
+          status: "Mock Mode",
+          details: "Live SHAP explainer is not being used.",
+          updated_at: now,
+        },
+        grade_prediction_model: {
+          connected: false,
+          loaded: false,
+          available: false,
+          status: "Mock Mode",
+          details: "Live grade prediction model is not being used.",
+          updated_at: now,
+        },
+        risk_cluster_model: {
+          connected: false,
+          loaded: false,
+          available: false,
+          status: "Mock Mode",
+          details: "Live risk cluster model is not being used.",
+          updated_at: now,
+        },
+        quiz_generator: {
+          connected: false,
+          loaded: false,
+          available: false,
+          status: "Mock Mode",
+          details: "Live quiz generator is not being used.",
+          updated_at: now,
+        },
+      },
+      runtime: {
+        frontend_mode: "Mock Mode",
+        mock_mode: true,
+        heuristic_fallback: true,
+        checked_at: now,
+      },
+    });
+  }
+
+  return request("/api/system/status");
+}
