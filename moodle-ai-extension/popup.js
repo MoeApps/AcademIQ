@@ -1,406 +1,513 @@
-const STORAGE_KEY = "moodleData";
-const BACKEND_URL = "http://localhost:8000/raw-moodle-payloads";
-const CONTENT_URL = BACKEND_URL.replace(/\/raw-moodle-payloads$/, "/materials/content");
+// popup.js — AcademIQ Extension UI
+// All backend communication goes through this file. The API base URL is read
+// from chrome.storage.local so the user can change it without reloading.
 
-const refs = {
-    refreshBtn: document.getElementById("refreshBtn"),
-    downloadJsonBtn: document.getElementById("downloadJsonBtn"),
-    clearDataBtn: document.getElementById("clearDataBtn"),
-    downloadAllPdfsBtn: document.getElementById("downloadAllPdfsBtn"),
-    emptyState: document.getElementById("emptyState"),
-    dashboard: document.getElementById("dashboard"),
-    courseSelector: document.getElementById("courseSelector"),
-    performanceStats: document.getElementById("performanceStats"),
-    materialsList: document.getElementById("materialsList"),
-    downloadMeta: document.getElementById("downloadMeta"),
-    lastUpdated: document.getElementById("lastUpdated")
+"use strict";
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+const STORAGE_KEY      = "moodleData";
+const SETTINGS_KEY     = "academiqSettings";
+const SYNC_STATUS_KEY  = "academiqSyncStatus";
+
+const DEFAULT_API_URL  = "http://localhost:8000";
+const SYNC_ENDPOINT    = "/raw-moodle-payloads";
+const ACADEMIQ_URL_KEY = "academiqAppUrl"; // base URL for "Open AcademIQ" button
+
+// ─── DOM refs ────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+
+const dom = {
+  statusDot:       $("statusDot"),
+  accountBanner:   $("accountBanner"),
+  accountIcon:     $("accountIcon"),
+  accountLabel:    $("accountLabel"),
+  accountEmail:    $("accountEmail"),
+  openAcademiqBtn: $("openAcademiqBtn"),
+  lastSyncLabel:   $("lastSyncLabel"),
+  syncBtn:         $("syncBtn"),
+  syncProgress:    $("syncProgress"),
+  progressFill:    $("progressFill"),
+  progressLabel:   $("progressLabel"),
+  syncResult:      $("syncResult"),
+  statsCard:       $("statsCard"),
+  statCourses:     $("statCourses"),
+  statMaterials:   $("statMaterials"),
+  statActiveDays:  $("statActiveDays"),
+  statClicks:      $("statClicks"),
+  courseCard:      $("courseCard"),
+  courseSelector:  $("courseSelector"),
+  performanceStats:$("performanceStats"),
+  materialsCard:   $("materialsCard"),
+  downloadMeta:    $("downloadMeta"),
+  downloadAllBtn:  $("downloadAllBtn"),
+  materialsList:   $("materialsList"),
+  apiUrlInput:     $("apiUrlInput"),
+  autoSyncToggle:  $("autoSyncToggle"),
+  saveSettingsBtn: $("saveSettingsBtn"),
+  settingsSaved:   $("settingsSaved"),
+  refreshBtn:      $("refreshBtn"),
+  scanAllBtn:      $("scanAllBtn"),
+  downloadJsonBtn: $("downloadJsonBtn"),
+  clearDataBtn:    $("clearDataBtn"),
 };
 
-let currentData = null;
+// ─── State ───────────────────────────────────────────────────────────────────
+let currentData    = null;
 let currentCourseId = null;
+let apiBaseUrl     = DEFAULT_API_URL;
 
-const sanitizePayload = (data) => {
-    if (!data) return null;
-    const { events, grades, materials, courses, behavior, student, metricsByCourse } = data;
-    return {
-        student,
-        courses,
-        behavior,
-        metricsByCourse,
-        events: (events || []).map(({ _id, ...event }) => event),
-        grades: (grades || []).map(({ _key, ...grade }) => grade),
-        // Single canonical materials array — no duplicated learning_materials /
-        // materialsByCourse / knowledge_base structures are sent any more.
-        materials: (materials || []).map(({ _key, ...material }) => material)
-    };
-};
-
-const getStorageData = () =>
-    new Promise((resolve) => {
-        chrome.storage.local.get(STORAGE_KEY, (res) => {
-            resolve(res[STORAGE_KEY] || null);
-        });
+// ─── Settings ─────────────────────────────────────────────────────────────────
+const loadSettings = () =>
+  new Promise((resolve) => {
+    chrome.storage.local.get(SETTINGS_KEY, (res) => {
+      const s = res[SETTINGS_KEY] || {};
+      apiBaseUrl = (s.apiUrl || DEFAULT_API_URL).replace(/\/$/, "");
+      dom.apiUrlInput.value = apiBaseUrl;
+      dom.autoSyncToggle.checked = Boolean(s.autoSync);
+      resolve(s);
     });
+  });
 
-const syncToBackend = async (data) => {
-    if (!data) {
-        alert("No data to sync.");
-        return false;
-    }
-    const payload = sanitizePayload(data);
-    try {
-        const response = await fetch(BACKEND_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        const result = await response.json();
-        console.log("Sync successful:", result);
-        return true;
-    } catch (error) {
-        console.error("Sync failed:", error);
-        alert(`Sync failed: ${error.message}`);
-        return false;
-    }
+const saveSettings = () => {
+  const s = {
+    apiUrl:    dom.apiUrlInput.value.trim().replace(/\/$/, "") || DEFAULT_API_URL,
+    autoSync:  dom.autoSyncToggle.checked,
+  };
+  apiBaseUrl = s.apiUrl;
+  chrome.storage.local.set({ [SETTINGS_KEY]: s });
+  dom.settingsSaved.classList.remove("hidden");
+  setTimeout(() => dom.settingsSaved.classList.add("hidden"), 1500);
 };
 
-const createStatCard = (label, value) => {
+// ─── Status helpers ───────────────────────────────────────────────────────────
+const setStatus = (state) => {
+  dom.statusDot.className = `status-dot ${state}`;
+};
+
+const showSyncResult = (ok, message) => {
+  dom.syncResult.textContent = message;
+  dom.syncResult.className   = `sync-result ${ok ? "ok" : "err"}`;
+  dom.syncResult.classList.remove("hidden");
+  setTimeout(() => dom.syncResult.classList.add("hidden"), 4000);
+};
+
+const setProgress = (pct, label) => {
+  dom.progressFill.style.width = `${pct}%`;
+  dom.progressLabel.textContent = label;
+};
+
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+const getStorageData = () =>
+  new Promise((resolve) => {
+    chrome.storage.local.get(STORAGE_KEY, (res) => resolve(res[STORAGE_KEY] || null));
+  });
+
+const getSyncStatus = () =>
+  new Promise((resolve) => {
+    chrome.storage.local.get(SYNC_STATUS_KEY, (res) => resolve(res[SYNC_STATUS_KEY] || {}));
+  });
+
+const saveSyncStatus = (patch) =>
+  new Promise((resolve) => {
+    chrome.storage.local.get(SYNC_STATUS_KEY, (res) => {
+      const merged = { ...(res[SYNC_STATUS_KEY] || {}), ...patch };
+      chrome.storage.local.set({ [SYNC_STATUS_KEY]: merged }, resolve);
+    });
+  });
+
+// ─── Account banner ───────────────────────────────────────────────────────────
+const renderAccountBanner = (data, syncStatus) => {
+  const student = data?.student || {};
+  const linkedId = syncStatus?.academiq_user_id;
+
+  dom.accountBanner.classList.remove("hidden");
+
+  if (linkedId) {
+    dom.accountIcon.textContent  = "✅";
+    dom.accountLabel.textContent = "Linked to AcademIQ";
+    dom.accountEmail.textContent = student.email || student.full_name || "";
+  } else if (student.email || student.moodle_user_id) {
+    dom.accountIcon.textContent  = "🔗";
+    dom.accountLabel.textContent = "Moodle identity detected";
+    dom.accountEmail.textContent = student.email || `Moodle ID: ${student.moodle_user_id}`;
+  } else {
+    dom.accountIcon.textContent  = "👤";
+    dom.accountLabel.textContent = "No identity detected";
+    dom.accountEmail.textContent = "Browse a Moodle page first";
+  }
+};
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+const renderStats = (data) => {
+  const courseCount    = Object.keys(data?.metricsByCourse || {}).length;
+  const materialCount  = (data?.materials || []).length;
+  const activeDays     = data?.behavior?.active_days_count || 0;
+  const totalClicks    = Object.values(data?.metricsByCourse || {})
+    .reduce((sum, m) => sum + (m.click_count || 0), 0);
+
+  dom.statCourses.textContent   = courseCount;
+  dom.statMaterials.textContent = materialCount;
+  dom.statActiveDays.textContent = activeDays;
+  dom.statClicks.textContent    = totalClicks;
+
+  dom.statsCard.classList.toggle("hidden", courseCount === 0);
+};
+
+// ─── Course selector ──────────────────────────────────────────────────────────
+const renderCourseSelector = (courseIds) => {
+  dom.courseSelector.innerHTML = "";
+  courseIds.forEach((id) => {
+    const m    = currentData?.metricsByCourse?.[id] || {};
+    const opt  = document.createElement("option");
+    opt.value  = id;
+    opt.textContent = m.course_name || `Course ${id}`;
+    dom.courseSelector.appendChild(opt);
+  });
+  if (!currentCourseId || !courseIds.includes(currentCourseId)) {
+    currentCourseId = courseIds[0] || null;
+  }
+  dom.courseSelector.value = currentCourseId || "";
+};
+
+const renderPerformance = (metrics) => {
+  dom.performanceStats.innerHTML = "";
+  const fields = [
+    ["Visits",        metrics.total_visits               || 0],
+    ["Time (min)",    Math.round((metrics.total_time_spent_seconds || 0) / 60)],
+    ["Resources",     metrics.number_of_resources_clicked || 0],
+    ["Assignments",   metrics.number_of_assignments_viewed || 0],
+    ["Quizzes",       metrics.quiz_attempts               || 0],
+    ["Submissions",   metrics.assignment_submissions       || 0],
+  ];
+  fields.forEach(([label, value]) => {
     const el = document.createElement("div");
     el.className = "stat";
-    el.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
-    return el;
+    el.innerHTML = `<div class="stat-value">${value}</div><div class="stat-label">${label}</div>`;
+    dom.performanceStats.appendChild(el);
+  });
 };
 
-const normalizeMaterial = (material, courseId) => ({
-    id: material.id || material.material_id,
-    courseId: material.courseId || material.course_id || courseId,
-    title: material.title || "Untitled Material",
-    type: material.type || material.material_type || "unknown",
-    url: material.url || "",
-    fileType: material.fileType || material.file_type || "unknown",
-    sourcePage: material.sourcePage || null,
-    downloadable: Boolean(material.downloadable)
-});
-
-const getCourseMaterials = (data, courseId) => {
-    // Read from the single canonical materials array, filtered by course.
-    const all = Array.isArray(data?.materials) ? data.materials : [];
-    return all
-        .filter((item) => (item.courseId || item.course_id) === courseId)
-        .map((m) => normalizeMaterial(m, courseId));
+// ─── Materials ────────────────────────────────────────────────────────────────
+const fileIcon = (type) => {
+  const t = (type || "").toLowerCase();
+  if (t === "pdf")  return "📄";
+  if (["doc","docx"].includes(t)) return "📝";
+  if (["ppt","pptx"].includes(t)) return "📊";
+  if (["xls","xlsx"].includes(t)) return "📈";
+  if (t === "link") return "🔗";
+  if (t === "folder") return "📁";
+  return "📎";
 };
 
-const getMaterialDownloadLabel = (material) => {
-    if (material.downloadStatus === "No downloadable files") return "No downloadable files";
-    if ((material.fileType || "").toLowerCase() === "folder" && !material.downloadable) return "No downloadable files";
-    return null;
+const isDownloadable = (m) => {
+  const ft = (m.fileType || "").toLowerCase();
+  if (ft === "folder" || ft === "html" || ft === "link") return false;
+  if (m.downloadStatus === "No downloadable files") return false;
+  return /^https?:/i.test(m.url || "") && (
+    m.downloadable ||
+    /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|zip)([\?#]|$)/i.test(m.url)
+  );
 };
 
-const isMaterialDownloadable = (material) => {
-    const fileType = (material.fileType || "").toLowerCase();
-    if (fileType === "folder") return false;
-    if (fileType === "html") return false;
-    if (material.downloadStatus === "No downloadable files") return false;
-    const hasDirectExt = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|zip)(\?|$)/i.test(material.url || "");
-    return /^https?:/i.test(material.url || "") && (material.downloadable || hasDirectExt || (fileType !== "link" && fileType !== "unknown"));
+const getCourseMaterials = (courseId) => {
+  const all = Array.isArray(currentData?.materials) ? currentData.materials : [];
+  return all.filter((m) => (m.courseId || m.course_id) === courseId).map((m) => ({
+    id:         m.id || m.material_id,
+    courseId:   m.courseId || m.course_id || courseId,
+    title:      m.title || "Untitled",
+    type:       m.type || m.material_type || "unknown",
+    fileType:   m.fileType || m.file_type || "unknown",
+    url:        m.url || "",
+    downloadable: Boolean(m.downloadable),
+  }));
 };
 
-const startDownload = (material, index = 0) =>
-    new Promise((resolve) => {
-        const fallbackName = `${(material.title || `material_${index + 1}`).replace(/[\\/:*?"<>|]+/g, "_")}.${(material.fileType || "bin").replace(/[^a-z0-9]/gi, "") || "bin"}`;
-        chrome.downloads.download(
-            {
-                url: material.url,
-                filename: fallbackName,
-                conflictAction: "uniquify",
-                saveAs: false
-            },
-            (downloadId) => {
-                if (downloadId) {
-                    resolve({ ok: true, method: "download" });
-                    return;
-                }
-                chrome.tabs.create({ url: material.url }, (tab) => {
-                    resolve({ ok: Boolean(tab?.id), method: tab?.id ? "tab" : "failed" });
-                });
-            }
-        );
-    });
+const renderMaterials = (courseId) => {
+  const materials = getCourseMaterials(courseId);
+  const groups = { lecture: [], lab: [], other: [] };
+  materials.forEach((m) => {
+    const t = (m.type || "").toLowerCase();
+    if (t === "lecture") groups.lecture.push(m);
+    else if (t === "lab") groups.lab.push(m);
+    else groups.other.push(m);
+  });
 
-const fileTypeIcon = (fileType) => {
-    const ft = (fileType || "").toLowerCase();
-    if (ft === "pdf") return "📄";
-    if (["doc", "docx", "ppt", "pptx", "xls", "xlsx"].includes(ft)) return "📝";
-    if (ft === "link") return "🔗";
-    return "📁";
-};
+  dom.materialsList.innerHTML = "";
+  const downloadableCount = materials.filter(isDownloadable).length;
+  dom.downloadMeta.textContent = `${materials.length} materials · ${downloadableCount} downloadable`;
+  dom.downloadAllBtn.disabled  = downloadableCount === 0;
 
-const renderPerformance = (metrics = {}) => {
-    refs.performanceStats.innerHTML = "";
-    refs.performanceStats.appendChild(createStatCard("Total Visits", metrics.total_visits || 0));
-    refs.performanceStats.appendChild(createStatCard("Time Spent (min)", Math.round((metrics.total_time_spent_seconds || 0) / 60)));
-    refs.performanceStats.appendChild(createStatCard("Resource Clicks", metrics.number_of_resources_clicked || 0));
-    refs.performanceStats.appendChild(createStatCard("Assignments Viewed", metrics.number_of_assignments_viewed || 0));
-    refs.performanceStats.appendChild(createStatCard("Quiz Attempts", metrics.quiz_attempts || 0));
-    refs.performanceStats.appendChild(createStatCard("Assignment Submissions", metrics.assignment_submissions || 0));
-    refs.performanceStats.appendChild(createStatCard("Active Days", metrics.active_days_count || 0));
-    refs.performanceStats.appendChild(createStatCard("Clicks", metrics.click_count || 0));
-};
+  [["Lecture", groups.lecture], ["Lab", groups.lab], ["Other", groups.other]].forEach(
+    ([label, items]) => {
+      if (!items.length) return;
+      const groupLabel = document.createElement("div");
+      groupLabel.className = "material-group-label";
+      groupLabel.textContent = `${label} (${items.length})`;
+      dom.materialsList.appendChild(groupLabel);
 
-const groupMaterials = (materials) => {
-    const groups = { lecture: [], lab: [], other: [] };
-    materials.forEach((material) => {
-        const type = (material.type || "unknown").toLowerCase();
-        if (type === "lecture") groups.lecture.push(material);
-        else if (type === "lab") groups.lab.push(material);
-        else groups.other.push(material);
-    });
-    return groups;
-};
-
-const renderMaterialsList = (materials) => {
-    refs.materialsList.innerHTML = "";
-    const groups = groupMaterials(materials);
-    const orderedGroups = [
-        ["Lecture", groups.lecture],
-        ["Lab", groups.lab],
-        ["Other", groups.other]
-    ];
-    orderedGroups.forEach(([label, items]) => {
-        const section = document.createElement("section");
-        section.className = "material-group";
-        section.innerHTML = `<h3>${label} (${items.length})</h3>`;
-        if (!items.length) {
-            const empty = document.createElement("p");
-            empty.className = "subtle";
-            empty.textContent = "No materials in this group.";
-            section.appendChild(empty);
-            refs.materialsList.appendChild(section);
-            return;
-        }
-        items.forEach((material, index) => {
-            const item = document.createElement("article");
-            item.className = "material-item";
-            const canDownload = isMaterialDownloadable(material);
-            item.innerHTML = `
-                <div class="row"><strong>${fileTypeIcon(material.fileType)} ${material.title}</strong></div>
-                <div class="material-meta">Type: ${material.type} · File: ${(material.fileType || "unknown").toUpperCase()}</div>
-            `;
-            const button = document.createElement("button");
-            button.type = "button";
-            button.textContent = canDownload ? "Download" : "View on Moodle";
-            button.disabled = !material.url;
-            button.addEventListener("click", async () => {
-                if (!canDownload) {
-                    chrome.tabs.create({ url: material.url });
-                    return;
-                }
-                const result = await startDownload(material, index);
-                button.textContent = result.ok ? (result.method === "download" ? "Downloaded" : "Opened") : "Failed";
-            });
-            item.appendChild(button);
-            section.appendChild(item);
+      items.forEach((m, idx) => {
+        const canDl = isDownloadable(m);
+        const el    = document.createElement("div");
+        el.className = "material-item";
+        el.innerHTML = `
+          <span class="material-icon">${fileIcon(m.fileType)}</span>
+          <div class="material-info">
+            <div class="material-title" title="${m.title}">${m.title}</div>
+            <div class="material-meta-row">${m.type} · ${(m.fileType || "?").toUpperCase()}</div>
+          </div>
+        `;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn-ghost btn-sm";
+        btn.textContent = canDl ? "↓" : "↗";
+        btn.title = canDl ? "Download" : "View on Moodle";
+        btn.disabled = !m.url;
+        btn.addEventListener("click", async () => {
+          if (!canDl) { chrome.tabs.create({ url: m.url }); return; }
+          chrome.downloads.download({
+            url: m.url,
+            filename: `${(m.title || `material_${idx + 1}`).replace(/[\\/:*?"<>|]+/g, "_")}.${(m.fileType || "bin").replace(/[^a-z0-9]/gi, "") || "bin"}`,
+            conflictAction: "uniquify",
+            saveAs: false,
+          }, (dlId) => {
+            if (!dlId) chrome.tabs.create({ url: m.url });
+          });
         });
-        refs.materialsList.appendChild(section);
-    });
-};
-
-const renderCourseSelector = (courseIds) => {
-    refs.courseSelector.innerHTML = "";
-    courseIds.forEach((courseId) => {
-        const metrics = currentData.metricsByCourse?.[courseId] || {};
-        const option = document.createElement("option");
-        option.value = courseId;
-        option.textContent = metrics.course_name || `Course ${courseId}`;
-        refs.courseSelector.appendChild(option);
-    });
-    if (!currentCourseId || !courseIds.includes(currentCourseId)) {
-        currentCourseId = courseIds[0] || null;
+        el.appendChild(btn);
+        dom.materialsList.appendChild(el);
+      });
     }
-    refs.courseSelector.value = currentCourseId || "";
+  );
+
+  dom.materialsCard.classList.toggle("hidden", materials.length === 0);
 };
 
-const renderDashboard = () => {
-    const data = currentData;
-    const courseIds = Object.keys(data?.metricsByCourse || {});
-    const isEmpty = courseIds.length === 0;
-    refs.lastUpdated.textContent = `Last refreshed: ${new Date().toLocaleString()}`;
-    refs.emptyState.classList.toggle("hidden", !isEmpty);
-    refs.dashboard.classList.toggle("hidden", isEmpty);
-    if (isEmpty) {
-        refs.downloadAllPdfsBtn.disabled = true;
-        return;
-    }
-    renderCourseSelector(courseIds);
-    const metrics = data.metricsByCourse?.[currentCourseId] || {};
-    metrics.active_days_count = data.behavior?.active_days_count || metrics.active_days_count || 0;
-    renderPerformance(metrics);
-    const courseMaterials = getCourseMaterials(data, currentCourseId);
-    const downloadableCount = courseMaterials.filter(isMaterialDownloadable).length;
-    refs.downloadMeta.textContent = `Total materials: ${courseMaterials.length} · Download-ready: ${downloadableCount}`;
-    refs.downloadAllPdfsBtn.disabled = downloadableCount === 0;
-    renderMaterialsList(courseMaterials);
+// ─── Dashboard render ─────────────────────────────────────────────────────────
+const renderDashboard = async () => {
+  const syncStatus = await getSyncStatus();
+  const courseIds  = Object.keys(currentData?.metricsByCourse || {});
+  const hasData    = courseIds.length > 0;
+
+  renderAccountBanner(currentData, syncStatus);
+  renderStats(currentData || {});
+
+  if (!hasData) {
+    dom.courseCard.classList.add("hidden");
+    dom.materialsCard.classList.add("hidden");
+    return;
+  }
+
+  dom.courseCard.classList.remove("hidden");
+  renderCourseSelector(courseIds);
+
+  const metrics = { ...(currentData?.metricsByCourse?.[currentCourseId] || {}) };
+  metrics.active_days_count = currentData?.behavior?.active_days_count || metrics.active_days_count || 0;
+  renderPerformance(metrics);
+  renderMaterials(currentCourseId);
+
+  // Last sync time
+  if (syncStatus.lastSyncAt) {
+    const d = new Date(syncStatus.lastSyncAt);
+    dom.lastSyncLabel.textContent = `Last synced: ${d.toLocaleString()}`;
+  }
 };
 
-const refreshData = async () => {
-    currentData = await getStorageData();
-    renderDashboard();
+// ─── Sync to backend ──────────────────────────────────────────────────────────
+const sanitizePayload = (data) => {
+  if (!data) return null;
+  const { events, grades, materials, courses, behavior, student, metricsByCourse } = data;
+  return {
+    student,
+    courses,
+    behavior,
+    metricsByCourse,
+    events:    (events    || []).map(({ _id,   ...e }) => e),
+    grades:    (grades    || []).map(({ _key,  ...g }) => g),
+    materials: (materials || []).map(({ _key,  ...m }) => m),
+  };
 };
 
-// Add Sync button dynamically
-const addSyncButton = () => {
-    const syncBtn = document.createElement("button");
-    syncBtn.id = "syncBackendBtn";
-    syncBtn.textContent = "Sync to Backend";
-    syncBtn.style.marginLeft = "10px";
-    refs.downloadJsonBtn.parentNode.insertBefore(syncBtn, refs.downloadJsonBtn.nextSibling);
-    syncBtn.addEventListener("click", async () => {
-        const data = await getStorageData();
-        if (data) {
-            syncBtn.disabled = true;
-            syncBtn.textContent = "Syncing...";
-            const ok = await syncToBackend(data);
-            syncBtn.textContent = ok ? "Synced!" : "Sync Failed";
-            setTimeout(() => {
-                syncBtn.disabled = false;
-                syncBtn.textContent = "Sync to Backend";
-            }, 2000);
-        } else {
-            alert("No data to sync.");
-        }
-    });
+const syncToBackend = async (data) => {
+  const payload = sanitizePayload(data);
+  if (!payload) throw new Error("No data to sync.");
+
+  const url = `${apiBaseUrl}${SYNC_ENDPOINT}`;
+  const res  = await fetch(url, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Server returned ${res.status}${body ? ": " + body.slice(0, 120) : ""}`);
+  }
+
+  const result = await res.json();
+  // Persist the AcademIQ user id if the backend resolves it
+  await saveSyncStatus({
+    lastSyncAt:      new Date().toISOString(),
+    academiq_user_id: result?.academiq_user_id || result?.user_id || null,
+  });
+  return result;
 };
 
-// Add "Scan all courses" button — asks the content script on the active Moodle
-// tab to fetch + scrape every enrolled course (not just the open one).
-const addScanAllButton = () => {
-    const btn = document.createElement("button");
-    btn.id = "scanAllBtn";
-    btn.textContent = "Scan all courses";
-    btn.style.marginLeft = "10px";
-    refs.refreshBtn.parentNode.insertBefore(btn, refs.refreshBtn.nextSibling);
-    btn.addEventListener("click", () => {
-        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-            if (!tab?.id) return;
-            btn.disabled = true;
-            btn.textContent = "Scanning all courses...";
-            chrome.tabs.sendMessage(tab.id, { type: "scrape_all_courses" }, (response) => {
-                if (chrome.runtime.lastError || !response) {
-                    btn.textContent = "Open a Moodle tab first";
-                } else if (response.status === "done") {
-                    btn.textContent = `Scanned ${response.scraped}/${response.courses} courses`;
-                    refreshData();
-                } else {
-                    btn.textContent = "Scan failed";
-                }
-                setTimeout(() => {
-                    btn.disabled = false;
-                    btn.textContent = "Scan all courses";
-                }, 2500);
-            });
-        });
-    });
-};
+// ─── Full scan + sync flow ────────────────────────────────────────────────────
+const runSync = async () => {
+  dom.syncBtn.disabled = true;
+  dom.syncProgress.classList.remove("hidden");
+  dom.syncResult.classList.add("hidden");
+  setStatus("syncing");
 
-// Upload the current course's PDF materials' content to the backend so quizzes
-// can be generated from them. The extension holds the Moodle session, so it can
-// fetch the files; the backend extracts the text.
-const arrayBufferToBase64 = (buf) => {
-    const bytes = new Uint8Array(buf);
-    let binary = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-    }
-    return btoa(binary);
-};
+  try {
+    // Step 1: ask content script to scan all courses
+    setProgress(10, "Requesting scan from Moodle tab...");
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-const uploadMaterialContent = async (material) => {
-    const res = await fetch(material.url, { credentials: "include" });
-    if (!res.ok) return false;
-    const b64 = arrayBufferToBase64(await res.arrayBuffer());
-    const post = await fetch(CONTENT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            course_id: currentCourseId,
-            material_id: material.id,
-            content_base64: b64,
-        }),
-    });
-    return post.ok;
-};
-
-const addUploadQuizButton = () => {
-    const btn = document.createElement("button");
-    btn.id = "uploadQuizBtn";
-    btn.textContent = "Upload PDFs for quiz";
-    btn.style.marginLeft = "10px";
-    refs.downloadAllPdfsBtn.parentNode.insertBefore(btn, refs.downloadAllPdfsBtn.nextSibling);
-    btn.addEventListener("click", async () => {
-        const pdfs = getCourseMaterials(currentData, currentCourseId)
-            .filter((m) => (m.fileType || "").toLowerCase() === "pdf" && m.url);
-        if (!pdfs.length) {
-            btn.textContent = "No PDFs in this course";
-            setTimeout(() => (btn.textContent = "Upload PDFs for quiz"), 2500);
+    if (tab?.id) {
+      await new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(tab.id, { type: "scrape_all_courses" }, (response) => {
+          if (chrome.runtime.lastError) {
+            // Content script may not be injected on non-Moodle tabs — continue anyway
+            resolve(null);
             return;
-        }
-        btn.disabled = true;
-        let ok = 0;
-        for (let i = 0; i < pdfs.length; i += 1) {
-            btn.textContent = `Uploading ${i + 1}/${pdfs.length}...`;
-            try { if (await uploadMaterialContent(pdfs[i])) ok += 1; } catch (_e) { /* skip */ }
-        }
-        btn.textContent = `Uploaded ${ok}/${pdfs.length} PDFs`;
-        setTimeout(() => { btn.disabled = false; btn.textContent = "Upload PDFs for quiz"; }, 3000);
-    });
-};
-
-refs.courseSelector.addEventListener("change", () => {
-    currentCourseId = refs.courseSelector.value;
-    renderDashboard();
-});
-
-refs.downloadAllPdfsBtn.addEventListener("click", async () => {
-    const materials = getCourseMaterials(currentData, currentCourseId).filter(isMaterialDownloadable);
-    let successCount = 0;
-    for (let i = 0; i < materials.length; i += 1) {
-        const result = await startDownload(materials[i], i);
-        if (result.ok) successCount += 1;
+          }
+          resolve(response);
+        });
+      });
     }
-    refs.downloadMeta.textContent = `Total materials: ${materials.length} · Started: ${successCount}`;
-});
 
-refs.downloadJsonBtn.addEventListener("click", async () => {
+    setProgress(50, "Syncing to AcademIQ backend...");
+
+    // Step 2: read stored data and push to backend
     const data = await getStorageData();
-    if (!data) return;
-    const payload = sanitizePayload(data);
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "moodle_student_data.json";
-    a.click();
-    URL.revokeObjectURL(url);
-});
+    if (!data) throw new Error("No Moodle data found. Open a Moodle course page first.");
 
-refs.clearDataBtn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "clear_data" }, () => {
-        currentData = null;
-        currentCourseId = null;
-        renderDashboard();
-        refs.lastUpdated.textContent = "Data cleared";
+    await syncToBackend(data);
+    setProgress(100, "Done");
+
+    // Step 3: refresh UI
+    currentData = await getStorageData();
+    await renderDashboard();
+
+    setStatus("success");
+    showSyncResult(true, `✓ Synced successfully at ${new Date().toLocaleTimeString()}`);
+  } catch (err) {
+    setStatus("error");
+    showSyncResult(false, `✗ ${err.message}`);
+  } finally {
+    dom.syncBtn.disabled = false;
+    setTimeout(() => dom.syncProgress.classList.add("hidden"), 1500);
+  }
+};
+
+// ─── Scan all courses (without pushing to backend) ────────────────────────────
+const runScanAll = async () => {
+  dom.scanAllBtn.disabled = true;
+  dom.scanAllBtn.textContent = "Scanning...";
+  setStatus("syncing");
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) throw new Error("No active tab found.");
+
+    await new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tab.id, { type: "scrape_all_courses" }, (response) => {
+        if (chrome.runtime.lastError || !response) {
+          reject(new Error("Open a Moodle page first, then try again."));
+          return;
+        }
+        if (response.status === "done") {
+          resolve(response);
+        } else {
+          reject(new Error(response.error || "Scan failed."));
+        }
+      });
     });
+
+    currentData = await getStorageData();
+    await renderDashboard();
+    setStatus("success");
+    showSyncResult(true, "✓ Courses scanned. Click Sync Now to push data.");
+  } catch (err) {
+    setStatus("error");
+    showSyncResult(false, `✗ ${err.message}`);
+  } finally {
+    dom.scanAllBtn.disabled = false;
+    dom.scanAllBtn.textContent = "Scan All Courses";
+  }
+};
+
+// ─── Open AcademIQ ────────────────────────────────────────────────────────────
+dom.openAcademiqBtn.addEventListener("click", () => {
+  const base = apiBaseUrl.includes(":8000") ? "http://localhost:3000" : apiBaseUrl;
+  chrome.tabs.create({ url: base });
 });
 
-refs.refreshBtn.addEventListener("click", refreshData);
-document.addEventListener("DOMContentLoaded", () => {
-    refreshData();
-    addSyncButton();
-    addScanAllButton();
-    addUploadQuizButton();
+// ─── Download all files ───────────────────────────────────────────────────────
+dom.downloadAllBtn.addEventListener("click", async () => {
+  const materials = getCourseMaterials(currentCourseId).filter(isDownloadable);
+  for (let i = 0; i < materials.length; i++) {
+    const m = materials[i];
+    chrome.downloads.download({
+      url: m.url,
+      filename: `${(m.title || `material_${i + 1}`).replace(/[\\/:*?"<>|]+/g, "_")}.${(m.fileType || "bin").replace(/[^a-z0-9]/gi, "") || "bin"}`,
+      conflictAction: "uniquify",
+      saveAs: false,
+    });
+  }
+});
+
+// ─── Export JSON ──────────────────────────────────────────────────────────────
+dom.downloadJsonBtn.addEventListener("click", async () => {
+  const data = await getStorageData();
+  if (!data) return;
+  const blob = new Blob([JSON.stringify(sanitizePayload(data), null, 2)], { type: "application/json" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = "moodle_student_data.json";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ─── Clear data ───────────────────────────────────────────────────────────────
+dom.clearDataBtn.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "clear_data" }, () => {
+    currentData     = null;
+    currentCourseId = null;
+    renderDashboard();
+    dom.lastSyncLabel.textContent = "Data cleared";
+  });
+});
+
+// ─── Course selector change ───────────────────────────────────────────────────
+dom.courseSelector.addEventListener("change", () => {
+  currentCourseId = dom.courseSelector.value;
+  const metrics = { ...(currentData?.metricsByCourse?.[currentCourseId] || {}) };
+  metrics.active_days_count = currentData?.behavior?.active_days_count || 0;
+  renderPerformance(metrics);
+  renderMaterials(currentCourseId);
+});
+
+// ─── Event bindings ───────────────────────────────────────────────────────────
+dom.syncBtn.addEventListener("click", runSync);
+dom.scanAllBtn.addEventListener("click", runScanAll);
+dom.saveSettingsBtn.addEventListener("click", saveSettings);
+dom.refreshBtn.addEventListener("click", async () => {
+  currentData = await getStorageData();
+  await renderDashboard();
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadSettings();
+  currentData = await getStorageData();
+  await renderDashboard();
+
+  // Auto-sync if enabled and data exists
+  const settings = await new Promise((r) => chrome.storage.local.get(SETTINGS_KEY, (res) => r(res[SETTINGS_KEY] || {})));
+  if (settings.autoSync && currentData) {
+    await runSync();
+  }
 });

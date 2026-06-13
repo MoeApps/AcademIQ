@@ -1,52 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AcademIQ Dashboard</title>
-<link rel="stylesheet" href="popup.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AcademIQ Assistant</title>
+  <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
   <main class="container">
-    <header>
-      <h1>AcademIQ Assistant</h1>
-      <p id="lastUpdated" class="subtle">No extraction data yet</p>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <span class="brand-icon">🎓</span>
+        <span class="brand-name">AcademIQ</span>
+      </div>
+      <span id="statusDot" class="status-dot idle" title="Idle"></span>
     </header>
 
-    <section id="emptyState" class="card empty hidden">
-      <p>No course data found yet. Open Moodle course pages first.</p>
-    </section>
-
-    <section id="dashboard" class="hidden">
-      <section class="card">
-        <div class="row">
-          <h2>Course</h2>
-          <select id="courseSelector"></select>
+    <!-- Account status banner -->
+    <section id="accountBanner" class="card account-banner hidden">
+      <div class="account-row">
+        <span id="accountIcon">👤</span>
+        <div class="account-info">
+          <span id="accountLabel" class="account-label">Not linked</span>
+          <span id="accountEmail" class="account-email subtle"></span>
         </div>
-      </section>
+        <button id="openAcademiqBtn" class="btn btn-ghost btn-sm" type="button" title="Open AcademIQ">
+          Open ↗
+        </button>
+      </div>
+    </section>
 
-      <section class="card">
-        <h2>Extracted Performance Data</h2>
-        <div class="stats-grid" id="performanceStats"></div>
-      </section>
-
-      <section class="card">
-        <div class="row">
-          <h2>Extracted Learning Materials</h2>
-          <button id="downloadAllPdfsBtn" class="primary" type="button">Download All Files</button>
+    <!-- Sync status card -->
+    <section class="card sync-card">
+      <div class="sync-header">
+        <div>
+          <div class="sync-title">Moodle Sync</div>
+          <div id="lastSyncLabel" class="subtle">Never synced</div>
         </div>
-        <p id="downloadMeta" class="subtle">Download-ready files: 0</p>
-        <div id="materialsList" class="materials-list"></div>
-      </section>
+        <button id="syncBtn" class="btn btn-primary" type="button">Sync Now</button>
+      </div>
+      <div id="syncProgress" class="sync-progress hidden">
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <span id="progressLabel" class="subtle">Scanning...</span>
+      </div>
+      <div id="syncResult" class="sync-result hidden"></div>
     </section>
 
-    <section class="card actions">
-      <button id="refreshBtn" type="button">Refresh</button>
-      <button id="downloadJsonBtn" type="button">Download JSON</button>
-      <button id="clearDataBtn" type="button" class="danger">Clear Data</button>
+    <!-- Stats -->
+    <section id="statsCard" class="card hidden">
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="stat-value" id="statCourses">0</div>
+          <div class="stat-label">Courses</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statMaterials">0</div>
+          <div class="stat-label">Materials</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statActiveDays">0</div>
+          <div class="stat-label">Active Days</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statClicks">0</div>
+          <div class="stat-label">Total Clicks</div>
+        </div>
+      </div>
     </section>
+
+    <!-- Course viewer -->
+    <section id="courseCard" class="card hidden">
+      <div class="course-header">
+        <h2 class="section-title">Course Data</h2>
+        <select id="courseSelector" class="course-select"></select>
+      </div>
+      <div class="stats-grid" id="performanceStats"></div>
+    </section>
+
+    <!-- Materials -->
+    <section id="materialsCard" class="card hidden">
+      <div class="materials-header">
+        <h2 class="section-title">Materials</h2>
+        <div class="materials-meta">
+          <span id="downloadMeta" class="subtle"></span>
+          <button id="downloadAllBtn" class="btn btn-ghost btn-sm" type="button" disabled>Download All</button>
+        </div>
+      </div>
+      <div id="materialsList" class="materials-list"></div>
+    </section>
+
+    <!-- Settings -->
+    <section class="card settings-card">
+      <details id="settingsDetails">
+        <summary class="settings-toggle">⚙️ Settings</summary>
+        <div class="settings-body">
+          <label class="settings-label" for="apiUrlInput">Backend URL</label>
+          <div class="settings-row">
+            <input id="apiUrlInput" class="settings-input" type="url" placeholder="http://localhost:8000" />
+            <button id="saveSettingsBtn" class="btn btn-ghost btn-sm" type="button">Save</button>
+          </div>
+          <label class="settings-label" for="autoSyncToggle">
+            <input id="autoSyncToggle" type="checkbox" />
+            Auto-sync on page load
+          </label>
+          <div id="settingsSaved" class="settings-saved hidden">✓ Saved</div>
+        </div>
+      </details>
+    </section>
+
+    <!-- Footer actions -->
+    <section class="footer-actions">
+      <button id="refreshBtn" class="btn btn-ghost btn-sm" type="button">↻ Refresh</button>
+      <button id="scanAllBtn" class="btn btn-ghost btn-sm" type="button">Scan All Courses</button>
+      <button id="downloadJsonBtn" class="btn btn-ghost btn-sm" type="button">Export JSON</button>
+      <button id="clearDataBtn" class="btn btn-danger btn-sm" type="button">Clear</button>
+    </section>
+
   </main>
-
   <script src="popup.js"></script>
 </body>
 </html>
