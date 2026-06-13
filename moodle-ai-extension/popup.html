@@ -9,35 +9,44 @@
 <body>
   <main class="container">
 
-    <!-- Header -->
+    <!-- ── Header ── -->
     <header class="header card-anim" style="--i:0">
       <div class="header-brand">
         <span class="brand-logo">🎓</span>
         <span class="brand-name">AcademIQ</span>
       </div>
       <div class="header-right">
+        <span id="backendDot" class="backend-dot" title="Checking backend…"></span>
         <span id="statusLabel" class="status-label">Idle</span>
         <span id="statusDot" class="status-dot idle"></span>
       </div>
     </header>
 
-    <!-- Account banner -->
+    <!-- ── Account banner ── -->
     <section id="accountBanner" class="card account-banner card-anim hidden" style="--i:1">
       <div class="account-row">
         <div id="accountAvatar" class="account-avatar">?</div>
         <div class="account-info">
-          <span id="accountLabel" class="account-label">Not linked</span>
+          <span id="accountName" class="account-name">Not linked</span>
           <span id="accountEmail" class="account-email">–</span>
+          <span id="accountMeta" class="account-meta"></span>
         </div>
-        <button id="openAcademiqBtn" class="btn btn-primary btn-sm ripple" type="button">
-          Open ↗
-        </button>
+        <button id="openAcademiqBtn" class="btn btn-primary btn-sm ripple" type="button">Open ↗</button>
       </div>
-      <div id="openAcademiqMsg" class="open-msg hidden"></div>
+      <div id="openMsg" class="open-msg hidden"></div>
     </section>
 
-    <!-- Sync card -->
-    <section class="card sync-card card-anim" style="--i:2">
+    <!-- ── ML Risk card ── -->
+    <section id="mlCard" class="card ml-card card-anim hidden" style="--i:2">
+      <div class="ml-header">
+        <span class="ml-title">AI Performance Insight</span>
+        <span id="mlBadge" class="ml-badge">–</span>
+      </div>
+      <div id="mlBody" class="ml-body"></div>
+    </section>
+
+    <!-- ── Sync card ── -->
+    <section class="card sync-card card-anim" style="--i:3">
       <div class="sync-header">
         <div>
           <div class="sync-title">Moodle Sync</div>
@@ -49,69 +58,87 @@
         </button>
       </div>
       <div id="syncProgress" class="sync-progress hidden">
-        <div class="progress-bar">
-          <div id="progressFill" class="progress-fill"></div>
-        </div>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
         <span id="progressLabel" class="meta-text">Scanning…</span>
       </div>
+      <div id="syncDiff" class="sync-diff hidden"></div>
       <div id="syncResult" class="sync-result hidden"></div>
     </section>
 
-    <!-- Stats -->
-    <section id="statsCard" class="card stats-card card-anim hidden" style="--i:3">
+    <!-- ── Stats ── -->
+    <section id="statsCard" class="card stats-card card-anim hidden" style="--i:4">
       <div class="stats-grid">
         <div class="stat">
-          <div class="stat-value" id="statCourses"   data-target="0">0</div>
+          <div class="stat-value" id="statCourses">0</div>
           <div class="stat-label">Courses</div>
         </div>
         <div class="stat">
-          <div class="stat-value" id="statMaterials" data-target="0">0</div>
+          <div class="stat-value" id="statMaterials">0</div>
           <div class="stat-label">Materials</div>
         </div>
         <div class="stat">
-          <div class="stat-value" id="statActiveDays" data-target="0">0</div>
-          <div class="stat-label">Active Days</div>
+          <div class="stat-value" id="statStreak">0</div>
+          <div class="stat-label">Day Streak 🔥</div>
         </div>
         <div class="stat">
-          <div class="stat-value" id="statClicks"   data-target="0">0</div>
-          <div class="stat-label">Clicks</div>
+          <div class="stat-value" id="statGrades">–</div>
+          <div class="stat-label">Avg Score</div>
         </div>
       </div>
     </section>
 
-    <!-- Course data (collapsible) -->
-    <section id="courseCard" class="card card-anim hidden" style="--i:4">
+    <!-- ── Grades per course ── -->
+    <section id="gradesCard" class="card card-anim hidden" style="--i:5">
+      <details id="gradesDetails">
+        <summary class="section-summary">
+          <span class="section-title">📊 Grades by Course</span>
+        </summary>
+        <div id="gradesList" class="grades-list"></div>
+      </details>
+    </section>
+
+    <!-- ── Course data ── -->
+    <section id="courseCard" class="card card-anim hidden" style="--i:6">
       <details id="courseDetails" open>
-        <summary class="course-summary">
-          <span class="section-title">Course Data</span>
+        <summary class="section-summary">
+          <span class="section-title">📚 Course Data</span>
           <select id="courseSelector" class="course-select" onclick="event.stopPropagation()"></select>
         </summary>
         <div class="course-body">
-          <div class="stats-grid perf-grid" id="performanceStats"></div>
+          <div id="performanceStats" class="perf-grid"></div>
         </div>
       </details>
     </section>
 
-    <!-- Materials (collapsible) -->
-    <section id="materialsCard" class="card card-anim hidden" style="--i:5">
+    <!-- ── Materials ── -->
+    <section id="materialsCard" class="card card-anim hidden" style="--i:7">
       <details id="materialsDetails">
-        <summary class="course-summary">
-          <span class="section-title">Materials</span>
+        <summary class="section-summary">
+          <span class="section-title">📁 Materials</span>
           <div class="materials-actions" onclick="event.stopPropagation()">
-            <span id="downloadMeta" class="meta-text"></span>
-            <button id="downloadAllBtn" class="btn btn-ghost btn-sm ripple" type="button" disabled>
-              ↓ All
-            </button>
+            <input id="materialSearch" class="search-input" type="search" placeholder="Search…" />
+            <button id="downloadAllBtn" class="btn btn-ghost btn-sm ripple" type="button" disabled>↓ All</button>
           </div>
         </summary>
+        <p id="downloadMeta" class="meta-text" style="margin:4px 0 6px"></p>
         <div id="materialsList" class="materials-list"></div>
       </details>
     </section>
 
-    <!-- Settings (collapsible) -->
-    <section class="card settings-card card-anim" style="--i:6">
+    <!-- ── Sync history ── -->
+    <section id="historyCard" class="card card-anim hidden" style="--i:8">
+      <details id="historyDetails">
+        <summary class="section-summary">
+          <span class="section-title">🕐 Sync History</span>
+        </summary>
+        <div id="historyList" class="history-list"></div>
+      </details>
+    </section>
+
+    <!-- ── Settings ── -->
+    <section class="card settings-card card-anim" style="--i:9">
       <details id="settingsDetails">
-        <summary class="settings-toggle">⚙ Settings</summary>
+        <summary class="section-summary settings-toggle">⚙ Settings</summary>
         <div class="settings-body">
           <label class="settings-label" for="apiUrlInput">Backend URL</label>
           <div class="settings-row">
@@ -119,20 +146,19 @@
             <button id="saveSettingsBtn" class="btn btn-ghost btn-sm ripple" type="button">Save</button>
           </div>
           <label class="settings-label checkbox-label" for="autoSyncToggle">
-            <input id="autoSyncToggle" type="checkbox" />
-            Auto-sync on popup open
+            <input id="autoSyncToggle" type="checkbox" /> Auto-sync on popup open
           </label>
           <div id="settingsSaved" class="settings-saved hidden">✓ Saved</div>
         </div>
       </details>
     </section>
 
-    <!-- Footer actions -->
-    <footer class="footer-actions card-anim" style="--i:7">
-      <button id="refreshBtn"    class="btn btn-ghost btn-sm ripple" type="button">↻ Refresh</button>
-      <button id="scanAllBtn"    class="btn btn-ghost btn-sm ripple" type="button">Scan All</button>
+    <!-- ── Footer ── -->
+    <footer class="footer-actions card-anim" style="--i:10">
+      <button id="refreshBtn"     class="btn btn-ghost btn-sm ripple" type="button">↻ Refresh</button>
+      <button id="scanAllBtn"     class="btn btn-ghost btn-sm ripple" type="button">Scan All</button>
       <button id="downloadJsonBtn" class="btn btn-ghost btn-sm ripple" type="button">Export JSON</button>
-      <button id="clearDataBtn"  class="btn btn-danger btn-sm ripple" type="button">Clear</button>
+      <button id="clearDataBtn"   class="btn btn-danger btn-sm ripple" type="button">Clear</button>
     </footer>
 
   </main>
