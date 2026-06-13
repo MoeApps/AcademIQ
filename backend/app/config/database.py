@@ -6,59 +6,54 @@ from pymongo.server_api import ServerApi
 
 from app.config.settings import MONGODB_URI, MONGODB_DB_NAME
 
-# Connection string + database name now come from the environment
-# (see app/config/settings.py); the previous hard-coded values remain the
-# fallback so nothing breaks if no .env is present.
 uri = MONGODB_URI
 
-# Use certifi's CA bundle for the TLS handshake. Atlas connections on Windows/
-# macOS often fail with TLS errors when the OS cert store is stale; certifi
-# avoids that. (Plain-ASCII logs below — emoji crash cp1252 Windows consoles.)
 try:
     client = MongoClient(uri, server_api=ServerApi("1"), tlsCAFile=certifi.where())
-    # Force a connection to verify
     client.admin.command("ping")
     print("[OK] Connected to MongoDB Atlas!")
 except Exception as e:
     print(f"[ERROR] MongoDB connection failed: {e}")
-    sys.exit(1)   # Stop the app if DB is unreachable
+    sys.exit(1)
 
 db = client[MONGODB_DB_NAME]
 
-# Collections
-collection_name = db["AcademIQ"]
-assignments_collection = db["assignments_collection"]
-sessions_collection = db["sessions_collection"]
-quizzes_collection = db["quizzes_collection"]
-courses_collection = db["courses_collection"]
-raw_moodle_payload_collection = db["raw_moodle_payload_collection"]
-feature_vectors_collection = db["feature_vectors"]
-ml_results_collection = db["ml_results"]
-auth_sessions_collection = db["sessions"]   # for auth session tokens
+# ── Collections ────────────────────────────────────────────────────────────────
+collection_name                  = db["AcademIQ"]
+assignments_collection           = db["assignments_collection"]
+sessions_collection              = db["sessions_collection"]
+quizzes_collection               = db["quizzes_collection"]
+courses_collection               = db["courses_collection"]
+raw_moodle_payload_collection    = db["raw_moodle_payload_collection"]
+feature_vectors_collection       = db["feature_vectors"]
+ml_results_collection            = db["ml_results"]
+auth_sessions_collection         = db["sessions"]
 
-
-# AcademIQ user accounts (admins + students). `users_collection` is the
-# canonical name used throughout the new auth/admin code; `user` is kept as a
-# backwards-compatible alias for any older references.
+# AcademIQ user accounts (admins + students).
 users_collection = db["users"]
-user = users_collection
+user             = users_collection   # backwards-compatible alias
 
-# Normalized Moodle-data collections (see services/moodle_ingest.py). Materials
-# are stored ONCE here instead of being duplicated inside each student payload.
-course_materials_collection = db["course_materials"]   # canonical materials
-student_metrics_collection = db["student_metrics"]     # per-(user,course) metrics
-student_events_collection = db["student_events"]       # per-user event stream
-system_events_collection = db["system_events"]
+# Normalized Moodle-data collections (see services/moodle_ingest.py).
+course_materials_collection = db["course_materials"]
+student_metrics_collection  = db["student_metrics"]
+student_events_collection   = db["student_events"]
+system_events_collection    = db["system_events"]
 
+# Token collections — all short-lived, hashed before storage, single-use.
+password_reset_tokens_collection = db["password_reset_tokens"]
+magic_link_tokens_collection     = db["magic_link_tokens"]
+
+
+# ── Index helpers ──────────────────────────────────────────────────────────────
 
 def _ensure_unique_partial(field: str, name: str) -> None:
     """
     Create a unique index that only applies when `field` is a string.
 
-    A *partial* index (not sparse) is required because we store explicit nulls
+    A partial index (not sparse) is required because we store explicit nulls
     for unset identifiers, and a sparse unique index still collides on
-    present-but-null values — only a partialFilterExpression excludes them. Drops
-    and recreates if an older (sparse) index with the same name exists.
+    present-but-null values. Drops and recreates if an older (sparse) index
+    with the same name exists.
     """
     spec = dict(
         unique=True,
@@ -68,7 +63,6 @@ def _ensure_unique_partial(field: str, name: str) -> None:
     try:
         users_collection.create_index([(field, ASCENDING)], **spec)
     except Exception:
-        # Conflicting older index definition — drop and recreate.
         try:
             users_collection.drop_index(name)
         except Exception:
@@ -78,20 +72,23 @@ def _ensure_unique_partial(field: str, name: str) -> None:
 
 def ensure_indexes() -> None:
     """
-    Create the indexes the auth/identity-mapping layer relies on. Safe to call
-    repeatedly. Invoked on app startup from main.py.
+    Create all indexes the auth/identity-mapping/ingest layers rely on.
+    Safe to call repeatedly — invoked on app startup from main.py.
     """
-    # Email is the login identifier — must be unique.
+    # ── Users ──────────────────────────────────────────────────────────────
     users_collection.create_index([("email", ASCENDING)], unique=True, name="uniq_email")
-    # Moodle identity linkage keys — unique only among real (string) values, so
-    # any number of accounts may have a null moodle_user_id / student_id.
     _ensure_unique_partial("moodle_user_id", "uniq_moodle_user_id")
-    _ensure_unique_partial("student_id", "uniq_student_id")
-    # Session token lookups + TTL-style expiry housekeeping.
-    auth_sessions_collection.create_index([("token_hash", ASCENDING)], unique=True, name="uniq_token_hash")
-    auth_sessions_collection.create_index([("expires_at", ASCENDING)], name="session_expiry")
+    _ensure_unique_partial("student_id",     "uniq_student_id")
 
-    # Password reset tokens — unique per hash, TTL index for auto-expiry.
+    # ── Auth sessions ──────────────────────────────────────────────────────
+    auth_sessions_collection.create_index(
+        [("token_hash", ASCENDING)], unique=True, name="uniq_token_hash"
+    )
+    auth_sessions_collection.create_index(
+        [("expires_at", ASCENDING)], name="session_expiry"
+    )
+
+    # ── Password reset tokens ──────────────────────────────────────────────
     password_reset_tokens_collection.create_index(
         [("token_hash", ASCENDING)], unique=True, name="uniq_reset_token_hash"
     )
@@ -99,8 +96,15 @@ def ensure_indexes() -> None:
         [("expires_at", ASCENDING)], name="reset_token_expiry"
     )
 
-    # Normalized Moodle data — uniqueness keys that guarantee a material/metric/
-    # event is stored exactly once (the dedup contract for ingestion).
+    # ── Magic-link tokens ──────────────────────────────────────────────────
+    magic_link_tokens_collection.create_index(
+        [("token_hash", ASCENDING)], unique=True, name="uniq_magic_token_hash"
+    )
+    magic_link_tokens_collection.create_index(
+        [("expires_at", ASCENDING)], name="magic_token_expiry"
+    )
+
+    # ── Normalized Moodle data ─────────────────────────────────────────────
     course_materials_collection.create_index(
         [("course_id", ASCENDING), ("material_id", ASCENDING)],
         unique=True, name="uniq_course_material",
@@ -114,12 +118,10 @@ def ensure_indexes() -> None:
         unique=True, name="uniq_user_event",
     )
 
-    # One current snapshot per student — re-syncs update the same document
-    # rather than inserting a new one. Partial filter so legacy docs without the
-    # field don't collide.
+    # One snapshot per student — re-syncs update in place.
     for coll, name in (
         (raw_moodle_payload_collection, "uniq_raw_user"),
-        (feature_vectors_collection, "uniq_feature_user"),
+        (feature_vectors_collection,    "uniq_feature_user"),
     ):
         try:
             coll.create_index(
@@ -130,6 +132,3 @@ def ensure_indexes() -> None:
             )
         except Exception as exc:
             print(f"[WARN] could not create {name} (resolve duplicates first): {exc}")
-
-# Password reset tokens — short-lived, single-use, hashed before storage.
-password_reset_tokens_collection = db["password_reset_tokens"]

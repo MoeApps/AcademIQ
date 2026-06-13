@@ -10,100 +10,117 @@
   <main class="container">
 
     <!-- Header -->
-    <header class="header">
+    <header class="header card-anim" style="--i:0">
       <div class="header-brand">
-        <span class="brand-icon">🎓</span>
+        <span class="brand-logo">🎓</span>
         <span class="brand-name">AcademIQ</span>
       </div>
-      <span id="statusDot" class="status-dot idle" title="Idle"></span>
+      <div class="header-right">
+        <span id="statusLabel" class="status-label">Idle</span>
+        <span id="statusDot" class="status-dot idle"></span>
+      </div>
     </header>
 
-    <!-- Account status banner -->
-    <section id="accountBanner" class="card account-banner hidden">
+    <!-- Account banner -->
+    <section id="accountBanner" class="card account-banner card-anim hidden" style="--i:1">
       <div class="account-row">
-        <span id="accountIcon">👤</span>
+        <div id="accountAvatar" class="account-avatar">?</div>
         <div class="account-info">
           <span id="accountLabel" class="account-label">Not linked</span>
-          <span id="accountEmail" class="account-email subtle"></span>
+          <span id="accountEmail" class="account-email">–</span>
         </div>
-        <button id="openAcademiqBtn" class="btn btn-ghost btn-sm" type="button" title="Open AcademIQ">
+        <button id="openAcademiqBtn" class="btn btn-primary btn-sm ripple" type="button">
           Open ↗
         </button>
       </div>
+      <div id="openAcademiqMsg" class="open-msg hidden"></div>
     </section>
 
-    <!-- Sync status card -->
-    <section class="card sync-card">
+    <!-- Sync card -->
+    <section class="card sync-card card-anim" style="--i:2">
       <div class="sync-header">
         <div>
           <div class="sync-title">Moodle Sync</div>
-          <div id="lastSyncLabel" class="subtle">Never synced</div>
+          <div id="lastSyncLabel" class="meta-text">Never synced</div>
         </div>
-        <button id="syncBtn" class="btn btn-primary" type="button">Sync Now</button>
+        <button id="syncBtn" class="btn btn-primary ripple" type="button">
+          <span class="sync-icon">↻</span>
+          <span class="sync-label">Sync Now</span>
+        </button>
       </div>
       <div id="syncProgress" class="sync-progress hidden">
-        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
-        <span id="progressLabel" class="subtle">Scanning...</span>
+        <div class="progress-bar">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+        <span id="progressLabel" class="meta-text">Scanning…</span>
       </div>
       <div id="syncResult" class="sync-result hidden"></div>
     </section>
 
     <!-- Stats -->
-    <section id="statsCard" class="card hidden">
+    <section id="statsCard" class="card stats-card card-anim hidden" style="--i:3">
       <div class="stats-grid">
         <div class="stat">
-          <div class="stat-value" id="statCourses">0</div>
+          <div class="stat-value" id="statCourses"   data-target="0">0</div>
           <div class="stat-label">Courses</div>
         </div>
         <div class="stat">
-          <div class="stat-value" id="statMaterials">0</div>
+          <div class="stat-value" id="statMaterials" data-target="0">0</div>
           <div class="stat-label">Materials</div>
         </div>
         <div class="stat">
-          <div class="stat-value" id="statActiveDays">0</div>
+          <div class="stat-value" id="statActiveDays" data-target="0">0</div>
           <div class="stat-label">Active Days</div>
         </div>
         <div class="stat">
-          <div class="stat-value" id="statClicks">0</div>
-          <div class="stat-label">Total Clicks</div>
+          <div class="stat-value" id="statClicks"   data-target="0">0</div>
+          <div class="stat-label">Clicks</div>
         </div>
       </div>
     </section>
 
-    <!-- Course viewer -->
-    <section id="courseCard" class="card hidden">
-      <div class="course-header">
-        <h2 class="section-title">Course Data</h2>
-        <select id="courseSelector" class="course-select"></select>
-      </div>
-      <div class="stats-grid" id="performanceStats"></div>
-    </section>
-
-    <!-- Materials -->
-    <section id="materialsCard" class="card hidden">
-      <div class="materials-header">
-        <h2 class="section-title">Materials</h2>
-        <div class="materials-meta">
-          <span id="downloadMeta" class="subtle"></span>
-          <button id="downloadAllBtn" class="btn btn-ghost btn-sm" type="button" disabled>Download All</button>
+    <!-- Course data (collapsible) -->
+    <section id="courseCard" class="card card-anim hidden" style="--i:4">
+      <details id="courseDetails" open>
+        <summary class="course-summary">
+          <span class="section-title">Course Data</span>
+          <select id="courseSelector" class="course-select" onclick="event.stopPropagation()"></select>
+        </summary>
+        <div class="course-body">
+          <div class="stats-grid perf-grid" id="performanceStats"></div>
         </div>
-      </div>
-      <div id="materialsList" class="materials-list"></div>
+      </details>
     </section>
 
-    <!-- Settings -->
-    <section class="card settings-card">
+    <!-- Materials (collapsible) -->
+    <section id="materialsCard" class="card card-anim hidden" style="--i:5">
+      <details id="materialsDetails">
+        <summary class="course-summary">
+          <span class="section-title">Materials</span>
+          <div class="materials-actions" onclick="event.stopPropagation()">
+            <span id="downloadMeta" class="meta-text"></span>
+            <button id="downloadAllBtn" class="btn btn-ghost btn-sm ripple" type="button" disabled>
+              ↓ All
+            </button>
+          </div>
+        </summary>
+        <div id="materialsList" class="materials-list"></div>
+      </details>
+    </section>
+
+    <!-- Settings (collapsible) -->
+    <section class="card settings-card card-anim" style="--i:6">
       <details id="settingsDetails">
-        <summary class="settings-toggle">⚙️ Settings</summary>
+        <summary class="settings-toggle">⚙ Settings</summary>
         <div class="settings-body">
           <label class="settings-label" for="apiUrlInput">Backend URL</label>
           <div class="settings-row">
             <input id="apiUrlInput" class="settings-input" type="url" placeholder="http://localhost:8000" />
-            <button id="saveSettingsBtn" class="btn btn-ghost btn-sm" type="button">Save</button>
+            <button id="saveSettingsBtn" class="btn btn-ghost btn-sm ripple" type="button">Save</button>
           </div>
-          <label class="settings-label" for="autoSyncToggle">
+          <label class="settings-label checkbox-label" for="autoSyncToggle">
             <input id="autoSyncToggle" type="checkbox" />
-            Auto-sync on page load
+            Auto-sync on popup open
           </label>
           <div id="settingsSaved" class="settings-saved hidden">✓ Saved</div>
         </div>
@@ -111,12 +128,12 @@
     </section>
 
     <!-- Footer actions -->
-    <section class="footer-actions">
-      <button id="refreshBtn" class="btn btn-ghost btn-sm" type="button">↻ Refresh</button>
-      <button id="scanAllBtn" class="btn btn-ghost btn-sm" type="button">Scan All Courses</button>
-      <button id="downloadJsonBtn" class="btn btn-ghost btn-sm" type="button">Export JSON</button>
-      <button id="clearDataBtn" class="btn btn-danger btn-sm" type="button">Clear</button>
-    </section>
+    <footer class="footer-actions card-anim" style="--i:7">
+      <button id="refreshBtn"    class="btn btn-ghost btn-sm ripple" type="button">↻ Refresh</button>
+      <button id="scanAllBtn"    class="btn btn-ghost btn-sm ripple" type="button">Scan All</button>
+      <button id="downloadJsonBtn" class="btn btn-ghost btn-sm ripple" type="button">Export JSON</button>
+      <button id="clearDataBtn"  class="btn btn-danger btn-sm ripple" type="button">Clear</button>
+    </footer>
 
   </main>
   <script src="popup.js"></script>

@@ -110,6 +110,18 @@ export const api = {
     await request<void>("/api/auth/logout", { method: "POST" });
   },
 
+  /**
+   * Consume a magic-link token and create a real session.
+   * Called by the /magic-login page on mount.
+   */
+  async magicLogin(token: string): Promise<AuthResult> {
+    if (USE_MOCK) {
+      const user = getMockAuthUser("admin@academiq.local");
+      return delay({ user, role: user.role, token: "mock-session-token" });
+    }
+    return request<AuthResult>(`/api/auth/magic-login?token=${encodeURIComponent(token)}`);
+  },
+
   /** Resolve the current session, or null if unauthenticated. */
   async getMe(): Promise<AuthUser | null> {
     if (USE_MOCK) return delay(null, 150);

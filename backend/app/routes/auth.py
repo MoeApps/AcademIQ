@@ -1,10 +1,7 @@
 # backend/app/routes/auth.py
 """
-Authentication routes: email/password login, logout, and current-user lookup.
-
-On success a session token is created server-side, its hash stored, and the raw
-token returned BOTH as an httpOnly cookie (for the web app) and in the JSON body
-(so the Chrome extension / API clients can send it as a Bearer token).
+Authentication routes: login, logout, current-user, forgot/reset password,
+and magic-link one-click login (for the Chrome extension).
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -20,6 +17,10 @@ from app.config.settings import (
 )
 from app.models.user import serialize_user
 from app.repositories import session_repository, user_repository
+from app.repositories.magic_link_repository import (
+    consume_magic_token,
+    create_magic_token,
+)
 from app.repositories.password_reset_repository import (
     consume_reset_token,
     create_reset_token,
@@ -35,15 +36,15 @@ from app.services.security import (
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
 class LoginRequest(BaseModel):
-    # Plain str (not EmailStr): login is just a lookup key, and the project
-    # uses .local addresses which email-validator rejects as reserved.
     email: str
     password: str
 
 
 def _issue_session(response: Response, user: dict) -> str:
-    """Create a session, set the cookie, and return the raw token."""
+    """Create a session, set the httpOnly cookie, return the raw token."""
     token = generate_session_token()
     session_repository.create_session(
         token_hash=hash_token(token),
@@ -61,6 +62,8 @@ def _issue_session(response: Response, user: dict) -> str:
     )
     return token
 
+
+# ── Standard login / logout / me ──────────────────────────────────────────────
 
 @router.post("/login")
 async def login(payload: LoginRequest, response: Response):
@@ -100,9 +103,7 @@ async def me(user: dict = Depends(get_current_user)):
     return {"user": profile, "role": profile["role"]}
 
 
-# ---------------------------------------------------------------------------
-# Forgot password — request a reset link
-# ---------------------------------------------------------------------------
+# ── Forgot password ────────────────────────────────────────────────────────────
 
 class ForgotPasswordRequest(BaseModel):
     email: str
@@ -112,16 +113,13 @@ class ForgotPasswordRequest(BaseModel):
 async def forgot_password(payload: ForgotPasswordRequest):
     """
     Request a password-reset email.
-
-    Always returns 202 so the caller cannot enumerate valid accounts
-    (identical response whether the email exists or not).
+    Always returns 202 to prevent account enumeration.
     """
     user = user_repository.find_by_email(payload.email)
     if user:
         raw_token = generate_session_token()
         token_hash = hash_token(raw_token)
         create_reset_token(token_hash, str(user["_id"]))
-
         reset_url = (
             f"{APP_LOGIN_URL.removesuffix('/signin').rstrip('/')}"
             f"/reset-password?token={raw_token}"
@@ -134,9 +132,7 @@ async def forgot_password(payload: ForgotPasswordRequest):
     return {"status": "If that email exists, a reset link has been sent."}
 
 
-# ---------------------------------------------------------------------------
-# Reset password — consume the token and set a new password
-# ---------------------------------------------------------------------------
+# ── Reset password ─────────────────────────────────────────────────────────────
 
 class ResetPasswordRequest(BaseModel):
     token: str
@@ -146,11 +142,8 @@ class ResetPasswordRequest(BaseModel):
 @router.post("/reset-password")
 async def reset_password(payload: ResetPasswordRequest, response: Response):
     """
-    Consume a reset token and update the user's password.
-
-    On success: invalidates all existing sessions for the user, sets the new
-    password, and issues a fresh session (so the user is logged in immediately).
-    On failure (bad/expired token): 400 — no info leaked about why it failed.
+    Consume a reset token and set a new password.
+    Invalidates all existing sessions and issues a fresh one.
     """
     if not payload.new_password or len(payload.new_password) < 6:
         raise HTTPException(
@@ -180,5 +173,65 @@ async def reset_password(payload: ResetPasswordRequest, response: Response):
         "user": profile,
         "role": profile["role"],
         "token": token,
+        "token_type": "bearer",
+    }
+
+
+# ── Magic-link login (Chrome extension one-click) ─────────────────────────────
+
+class MagicLinkRequest(BaseModel):
+    academiq_user_id: str
+
+
+@router.post("/magic-link")
+async def request_magic_link(payload: MagicLinkRequest):
+    """
+    Issue a short-lived (60-second), single-use magic-link token for the
+    given AcademIQ user. Called by the Chrome extension after syncing.
+
+    Returns { token } only — the caller opens:
+        {appBaseUrl}/magic-login?token=<token>
+    """
+    user = user_repository.find_by_id(payload.academiq_user_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found.")
+
+    raw_token = generate_session_token()
+    token_hash = hash_token(raw_token)
+    create_magic_token(token_hash, str(user["_id"]))
+
+    return {"token": raw_token}
+
+
+@router.get("/magic-login")
+async def magic_login(token: str, response: Response):
+    """
+    Consume a magic-link token and create a real session.
+
+    Called by the frontend /magic-login page on mount. On success returns the
+    same shape as /login AND sets the httpOnly session cookie, so the browser
+    is fully authenticated.
+    """
+    if not token:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Token is required.")
+
+    token_hash = hash_token(token)
+    user_id = consume_magic_token(token_hash)
+    if not user_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This login link is invalid or has expired. Please sync again.",
+        )
+
+    user = user_repository.find_by_id(user_id)
+    if not user:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Account not found.")
+
+    session_token = _issue_session(response, user)
+    profile = serialize_user(user)
+    return {
+        "user": profile,
+        "role": profile["role"],
+        "token": session_token,
         "token_type": "bearer",
     }
