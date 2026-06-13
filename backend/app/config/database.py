@@ -91,6 +91,14 @@ def ensure_indexes() -> None:
     auth_sessions_collection.create_index([("token_hash", ASCENDING)], unique=True, name="uniq_token_hash")
     auth_sessions_collection.create_index([("expires_at", ASCENDING)], name="session_expiry")
 
+    # Password reset tokens — unique per hash, TTL index for auto-expiry.
+    password_reset_tokens_collection.create_index(
+        [("token_hash", ASCENDING)], unique=True, name="uniq_reset_token_hash"
+    )
+    password_reset_tokens_collection.create_index(
+        [("expires_at", ASCENDING)], name="reset_token_expiry"
+    )
+
     # Normalized Moodle data — uniqueness keys that guarantee a material/metric/
     # event is stored exactly once (the dedup contract for ingestion).
     course_materials_collection.create_index(
@@ -122,3 +130,6 @@ def ensure_indexes() -> None:
             )
         except Exception as exc:
             print(f"[WARN] could not create {name} (resolve duplicates first): {exc}")
+
+# Password reset tokens — short-lived, single-use, hashed before storage.
+password_reset_tokens_collection = db["password_reset_tokens"]

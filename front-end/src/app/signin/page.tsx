@@ -53,10 +53,8 @@ export default function SignInPage() {
     setErrors({ email: "", password: "", general: "" });
 
     try {
-      // Credentials are validated by the backend against AcademIQ accounts.
       const { user } = await api.signIn(formData.email, formData.password);
       signIn(user);
-      // Role-based redirect: admins manage users, students see their dashboard.
       router.push(user.role === "admin" ? "/admin" : "/dashboard");
     } catch {
       setErrors((prev) => ({
@@ -122,7 +120,15 @@ export default function SignInPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <Input
                 id="password"
                 name="password"

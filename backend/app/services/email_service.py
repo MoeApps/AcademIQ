@@ -66,6 +66,26 @@ def send_account_created_email(to_email: str, full_name: str, password: str) -> 
     return _send(to_email, subject, body)
 
 
+def send_reset_link_email(to_email: str, full_name: str, reset_url: str) -> bool:
+    """
+    Send a password-reset link to the user.
+
+    The link contains a short-lived, single-use token. The actual password is
+    never transmitted — the user sets a new one after following the link.
+    """
+    name = full_name.strip() or "there"
+    subject = "Reset your AcademIQ password"
+    body = (
+        f"Hi {name},\n\n"
+        "We received a request to reset your AcademIQ password.\n\n"
+        f"Click the link below to choose a new password (expires in 15 minutes):\n"
+        f"{reset_url}\n\n"
+        "If you did not request a password reset, you can safely ignore this email.\n\n"
+        "— The AcademIQ Team"
+    )
+    return _send(to_email, subject, body)
+
+
 def send_password_reset_email(to_email: str, full_name: str, password: str) -> bool:
     """Email a user their new temporary password after an admin reset."""
     name = full_name.strip() or "there"

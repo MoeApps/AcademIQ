@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 from app.config.database import client, ensure_indexes
 # Core routers (no heavy ML/data-science deps).
-from app.routes import moodle, auth, admin, student_data
+from app.routes import moodle, auth, admin, student_data, system_status
 
 app = FastAPI(title="AcademIQ Backend", version="1.0")
 
@@ -57,6 +57,8 @@ app.include_router(auth.router)      # /api/auth/login, /logout, /me
 app.include_router(admin.router)     # /api/admin/users (admin-only)
 app.include_router(moodle.router)    # /raw-moodle-payloads
 app.include_router(student_data.router)  # /courses, /dashboard, /courses/{id}/...
+app.include_router(system_status.router)  # /courses, /dashboard, /courses/{id}/...
+
 
 # ML routers are optional: they depend on joblib/scikit-learn/shap/tensorflow,
 # which may not be installed (or have no wheels on very new Python versions).

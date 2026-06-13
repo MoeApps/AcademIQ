@@ -77,6 +77,33 @@ export const api = {
     });
   },
 
+  /**
+   * Request a password-reset email.
+   * Always resolves — backend returns 202 regardless of whether the email exists.
+   */
+  async forgotPassword(email: string): Promise<void> {
+    if (USE_MOCK) return delay(undefined, 400);
+    await request<void>("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  /**
+   * Consume a reset token and set a new password.
+   * Returns the same shape as signIn so the caller can immediately authenticate.
+   */
+  async resetPassword(token: string, newPassword: string): Promise<AuthResult> {
+    if (USE_MOCK) {
+      const user = getMockAuthUser("admin@academiq.local");
+      return delay({ user, role: user.role, token: "mock-session-token" });
+    }
+    return request<AuthResult>("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+  },
+
   /** Invalidate the current session. */
   async signOut(): Promise<void> {
     if (USE_MOCK) return delay(undefined, 150);
