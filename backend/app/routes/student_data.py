@@ -8,13 +8,16 @@ Paths intentionally have NO /api prefix to match the frontend's api.ts calls
 (/courses, /dashboard, /courses/{id}/performance, ...).
 """
 
-from typing import Any, Dict, List
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import get_current_user
 from app.repositories import material_repository
+from app.schema.timeline_schema import EvidenceTimelineResponse
 from app.services import quiz_gen, student_data
+from app.services.timeline_service import build_timeline
 
 router = APIRouter(tags=["Student data"])
 
@@ -83,3 +86,63 @@ def generate_quiz(
         }]
 
     return {"courseId": course_id, "materialIds": material_ids, "questions": questions}
+
+
+# ── Evidence Timeline ──────────────────────────────────────────────────────────
+
+@router.get("/timeline", response_model=EvidenceTimelineResponse)
+def get_timeline(
+    course_id: Optional[str]  = Query(None, description="Filter to a single Moodle course"),
+    limit:     int            = Query(100,  ge=1, le=500, description="Max items to return"),
+    start_date: Optional[datetime] = Query(None, description="ISO 8601 lower bound (inclusive)"),
+    end_date:   Optional[datetime] = Query(None, description="ISO 8601 upper bound (inclusive)"),
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Return the Evidence Timeline for the authenticated student.
+
+    Merges Moodle interaction events, grade records, and ML assessment history
+    into a single chronological narrative that answers:
+    *"Why did AcademIQ classify me as at risk?"*
+    """
+    user_id = str(user["_id"])
+    try:
+        result = build_timeline(
+            academiq_user_id=user_id,
+            course_id=course_id,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Timeline build failed: {exc}") from exc
+
+
+@router.get("/courses/{course_id}/timeline", response_model=EvidenceTimelineResponse)
+def get_course_timeline(
+    course_id:  str,
+    limit:      int = Query(100, ge=1, le=500),
+    start_date: Optional[datetime] = Query(None),
+    end_date:   Optional[datetime] = Query(None),
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Course-scoped shorthand for the Evidence Timeline.
+
+    Equivalent to GET /timeline?course_id={course_id}.
+    Provided so the frontend can call it alongside the other
+    /courses/{course_id}/... endpoints (performance, insights, materials).
+    """
+    user_id = str(user["_id"])
+    try:
+        result = build_timeline(
+            academiq_user_id=user_id,
+            course_id=course_id,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Timeline build failed: {exc}") from exc

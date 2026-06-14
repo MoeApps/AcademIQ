@@ -186,3 +186,35 @@ export interface GeneratedQuiz {
   materialIds: string[];
   questions: QuizQuestion[];
 }
+
+// ── Evidence Timeline ──────────────────────────────────────────────────────────
+
+export type TimelineSeverity = "positive" | "neutral" | "warning" | "danger";
+
+export interface EvidenceTimelineItem {
+  id: string;
+  /** ISO 8601 datetime string from the backend. */
+  date: string;
+  /** Human-readable label, e.g. "Submitted assignment: Lab Week 1 — 78%". */
+  label: string;
+  /** Discriminator string used for icon/colour selection. */
+  type: string;
+  severity: TimelineSeverity;
+  /** "moodle_event" | "moodle_grade" | "ai_result" | "generated" */
+  source: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EvidenceTimelineSummary {
+  total_events: number;
+  risk_signals: number;
+  positive_signals: number;
+  last_activity?: string | null;
+}
+
+export interface EvidenceTimelineResponse {
+  student_id: string;
+  course_id?: string | null;
+  timeline: EvidenceTimelineItem[];
+  summary: EvidenceTimelineSummary;
+}

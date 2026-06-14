@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ClipboardList } from "lucide-react";
 import { api } from "@/lib/api";
 import type { CourseInsights } from "@/lib/types";
 import { PerformanceClassification } from "@/components/insights/PerformanceClassification";
@@ -61,6 +61,18 @@ function InsightsContent() {
             summary={insights.classificationSummary}
           />
           <RiskFactors factors={insights.riskFactors} />
+
+          {/* Link to the Evidence Timeline for deeper behavioural explanation */}
+          <Link
+            href={`/evidence${courseParam ? `?course=${courseParam}` : ""}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <ClipboardList className="h-4 w-4 text-muted-foreground" />
+            View Evidence Timeline
+            <span className="ml-auto text-xs text-muted-foreground">
+              See what the AI based this on →
+            </span>
+          </Link>
         </>
       ) : (
         <>

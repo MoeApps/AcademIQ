@@ -23,6 +23,7 @@ import type {
   PerformanceAnalysis,
   UserInput,
   UserMutationResult,
+  EvidenceTimelineResponse,
 } from "./types";
 
 /**
@@ -229,6 +230,31 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ materialIds }),
     });
+  },
+
+  /**
+   * Evidence Timeline — chronological, human-readable learning behaviour log.
+   *
+   * Answers: "Why did AcademIQ classify me as at risk?"
+   *
+   * @param courseId  Optional Moodle course filter.
+   * @param limit     Max items to return (default 100).
+   */
+  async getTimeline(
+    courseId?: string,
+    limit = 100,
+  ): Promise<EvidenceTimelineResponse> {
+    if (USE_MOCK) {
+      return delay<EvidenceTimelineResponse>({
+        student_id: "mock-student",
+        course_id: courseId ?? null,
+        timeline: [],
+        summary: { total_events: 0, risk_signals: 0, positive_signals: 0, last_activity: null },
+      });
+    }
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (courseId) params.set("course_id", courseId);
+    return request<EvidenceTimelineResponse>(`/timeline?${params.toString()}`);
   },
 };
 export type SystemComponentStatus = {
