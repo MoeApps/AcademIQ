@@ -281,6 +281,29 @@ const incrementCourseMetric = (course, metricName, courseId, source) => {
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+    if (message.type === "courses") {
+  (async () => {
+    await queueStorageUpdate(async (data) => {
+      const coursesMap = toCourseMap(data.courses);
+
+      (message.payload || []).forEach((course) => {
+        mergeCourse(data, coursesMap, {
+          course_id: course.course_id,
+          course_name: course.course_name || `Course ${course.course_id}`,
+        });
+      });
+
+      syncMetricsByCourse(data, coursesMap);
+    });
+
+    sendResponse({ status: "ok" });
+  })();
+
+  return true;
+}
+
+    
     const tabId = sender.tab?.id;
 
     if (message.type === "get_data") {
@@ -451,15 +474,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
-    if (message.type === "materials") {
-        (async () => {
-            await queueStorageUpdate(async (data) => {
-                mergeMaterials(data, message.payload || []);
+if (message.type === "materials") {
+    (async () => {
+        await queueStorageUpdate(async (data) => {
+            const materials = message.payload || [];
+            const coursesMap = toCourseMap(data.courses || []);
+
+            materials.forEach((material) => {
+                const courseId = String(
+                    material.course_id || material.courseId || ""
+                ).trim();
+
+                if (!courseId || courseId === "1") return;
+
+                mergeCourse(data, coursesMap, {
+                    course_id: courseId,
+                    course_name:
+                        material.course_name ||
+                        material.courseName ||
+                        `Course ${courseId}`,
+                });
             });
-            sendResponse({ status: "ok" });
-        })();
-        return true;
-    }
+
+            syncMetricsByCourse(data, coursesMap);
+            mergeMaterials(data, materials);
+        });
+
+        sendResponse({ status: "ok" });
+    })();
+
+    return true;
+}
 
     return false;
 });

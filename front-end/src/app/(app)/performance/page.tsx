@@ -17,13 +17,19 @@ export default function PerformancePage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [analysis, setAnalysis] = useState<PerformanceAnalysis | null>(null);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [coursesError, setCoursesError] = useState("");
 
-  useEffect(() => {
-    api.getCourses().then((list) => {
+useEffect(() => {
+  api.getCourses()
+    .then((list) => {
       setCourses(list);
       if (list.length) setSelectedId(list[0].id);
-    });
-  }, []);
+    })
+    .catch(() => setCoursesError("Could not load courses."))
+    .finally(() => setCoursesLoading(false));
+}, []);
+
 
   useEffect(() => {
     if (!selectedId) return;
@@ -48,15 +54,27 @@ export default function PerformancePage() {
         </p>
       </div>
 
-      {courses.length ? (
-        <CourseSelect
-          courses={courses}
-          value={selectedId}
-          onChange={setSelectedId}
-        />
-      ) : (
-        <Skeleton className="h-16 w-full max-w-sm" />
-      )}
+{coursesLoading ? (
+  <Skeleton className="h-16 w-full max-w-sm" />
+) : coursesError ? (
+  <div className="rounded-xl border p-6">
+    <h2 className="font-semibold">Could not load courses</h2>
+    <p className="text-sm text-muted-foreground">{coursesError}</p>
+  </div>
+) : courses.length ? (
+  <CourseSelect
+    courses={courses}
+    value={selectedId}
+    onChange={setSelectedId}
+  />
+) : (
+  <div className="rounded-xl border p-6">
+    <h2 className="font-semibold">No courses found</h2>
+    <p className="text-sm text-muted-foreground">
+      Open Moodle, run Scan/Sync from the extension, then refresh this page.
+    </p>
+  </div>
+)}
 
       {ready ? (
         <div className="space-y-6">

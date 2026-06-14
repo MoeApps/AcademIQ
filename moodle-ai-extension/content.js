@@ -565,49 +565,74 @@
         return Array.from(map.values());
     };
 
-    const scrapeAllCourses = async () => {
-        const origin = window.location.origin;
+const scrapeAllCourses = async () => {
+    const origin = window.location.origin;
 
-        // Discover every enrolled course from the "My courses" listing.
-        let courses = [];
-        for (const path of ["/my/courses.php", "/my/"]) {
-            try {
-                const listing = await fetchDocument(new URL(path, origin).href);
-                courses = getAllCourseLinks(listing, origin);
-                if (courses.length) break;
-            } catch (_error) {
-                /* try the next listing */
-            }
+    let courses = [];
+
+    for (const path of ["/my/courses.php", "/my/"]) {
+        try {
+            const listing = await fetchDocument(new URL(path, origin).href);
+            courses = getAllCourseLinks(listing, origin);
+            if (courses.length) break;
+        } catch (_error) {
+            /* try the next listing */
         }
-        // Fallback: course links present on the current page (nav menu, etc.).
-        if (!courses.length) courses = getAllCourseLinks(document, origin);
+    }
 
-        let scraped = 0;
-        for (const course of courses) {
+    // Fallback: course links present on the current page.
+    if (!courses.length) {
+        courses = getAllCourseLinks(document, origin);
+    }
+
+    // IMPORTANT: send courses AFTER discovery and fallback.
+    if (courses.length) {
+        sendMessage(
+            "courses",
+            courses.map(({ course_id, course_name }) => ({
+                course_id: String(course_id),
+                course_name: course_name || `Course ${course_id}`,
+            }))
+        );
+    }
+
+    let scraped = 0;
+
+    for (const course of courses) {
+        try {
+            const courseDoc = await fetchDocument(course.url);
+            const materials = await extractMaterialsFromCourse(course, courseDoc, course.url);
+
+            if (materials.length) {
+                sendMessage("materials", materials);
+            }
+
             try {
-                const courseDoc = await fetchDocument(course.url);
-                const materials = await extractMaterialsFromCourse(course, courseDoc, course.url);
-                if (materials.length) sendMessage("materials", materials);
+                const gradeUrl = new URL(
+                    `/grade/report/user/index.php?id=${course.course_id}`,
+                    origin
+                ).href;
 
-                // Per-course grades from the user grade report (best-effort).
-                try {
-                    const gradeUrl = new URL(`/grade/report/user/index.php?id=${course.course_id}`, origin).href;
-                    const gradeDoc = await fetchDocument(gradeUrl);
-                    const grades = extractGradesFromTable(course.course_id, gradeDoc);
-                    if (grades.length) sendMessage("grades", grades);
-                } catch (_error) {
-                    /* grades are optional */
+                const gradeDoc = await fetchDocument(gradeUrl);
+                const grades = extractGradesFromTable(course.course_id, gradeDoc);
+
+                if (grades.length) {
+                    sendMessage("grades", grades);
                 }
-
-                scraped += 1;
             } catch (_error) {
-                /* skip a course that fails to load, keep going */
+                /* grades are optional */
             }
-        }
 
-        sendMessage("identity", getStudentIdentity());
-        return { courses: courses.length, scraped };
-    };
+            scraped += 1;
+        } catch (_error) {
+            /* skip failed course */
+        }
+    }
+
+    sendMessage("identity", getStudentIdentity());
+
+    return { courses: courses.length, scraped };
+};
 
     // Allow the popup to trigger a full all-courses scan on demand.
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
