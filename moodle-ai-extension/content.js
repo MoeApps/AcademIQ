@@ -540,6 +540,106 @@
     };
 
     // --- Scrape ALL enrolled courses (not only the currently open tab) -------
+    // ── Option B: Moodle Web Services token scraper ───────────────────────
+    // Moodle exposes a REST API at /webservice/rest/server.php
+    // The wstoken lives on the user's Security Keys page. We scrape it once
+    // and store it; if found, we use the API for richer historical data.
+    // If not found, we fall back to HTML scraping (Option A).
+
+    const scrapeWsToken = async () => {
+        try {
+            const origin = window.location.origin;
+            const keysDoc = await fetchDocument(`${origin}/user/managetoken.php`);
+            // Moodle shows tokens in a table; the mobile service token is most useful
+            const rows = keysDoc.querySelectorAll("table tbody tr");
+            for (const row of rows) {
+                const serviceCell = row.querySelector("td:first-child");
+                const tokenCell   = row.querySelector("td:nth-child(2)");
+                const service = cleanText(serviceCell?.textContent || "");
+                const token   = cleanText(tokenCell?.textContent || "");
+                if (token && token.length >= 32) {
+                    return { token, service };
+                }
+            }
+        } catch (_e) {
+            // Security keys page not accessible — fall back to HTML scraping
+        }
+        return null;
+    };
+
+    // Fetch historical data via Moodle Web Services API
+    // Requires wstoken. Returns enriched grades array or null if unavailable.
+    const fetchGradesViaWebService = async (wstoken, moodleUserId) => {
+        const origin = window.location.origin;
+        const base   = `${origin}/webservice/rest/server.php`;
+
+        try {
+            // gradereport_user_get_grades_table — works on all Moodle 3.1+
+            const params = new URLSearchParams({
+                wstoken,
+                wsfunction:  "gradereport_user_get_grades_table",
+                moodlerestformat: "json",
+                userid:      moodleUserId || "",
+                courseid:    0,  // 0 = all courses
+            });
+            const res  = await fetch(`${base}?${params}`, { credentials: "include" });
+            const json = await res.json();
+
+            if (json?.exception || !json?.tables) return null;
+
+            const grades = [];
+            for (const table of (json.tables || [])) {
+                const courseId = String(table.courseid || "");
+                for (const row of (table.tabledata || [])) {
+                    const itemName   = row.itemname?.content?.replace(/<[^>]+>/g, "").trim() || "";
+                    const gradeVal   = row.grade?.content?.replace(/<[^>]+>/g, "").trim() || "";
+                    const percentage = row.percentage?.content?.replace(/<[^>]+>/g, "").trim() || "";
+                    const feedback   = row.feedback?.content?.replace(/<[^>]+>/g, "").trim() || "";
+
+                    if (!itemName || !courseId) continue;
+
+                    const pctNum = parseFloat(percentage);
+                    grades.push({
+                        course_id:         courseId,
+                        item_name:         itemName,
+                        item_type:         itemName.toLowerCase().includes("quiz") ? "quiz" : "assignment",
+                        grade:             gradeVal,
+                        max_grade:         null,
+                        percentage:        isFinite(pctNum) ? pctNum : null,
+                        submission_status: feedback || null,
+                        submission_time:   null,
+                        source:            "webservice",
+                    });
+                }
+            }
+            return grades.length ? grades : null;
+        } catch (_e) {
+            return null;
+        }
+    };
+
+    // Store wstoken in localStorage so we don't re-scrape every page load
+    const getOrFetchWsToken = async () => {
+        try {
+            const stored = JSON.parse(localStorage.getItem("academiq_wstoken") || "null");
+            if (stored?.token && stored?.fetchedAt) {
+                // Tokens are valid for months; re-scrape after 7 days
+                const age = Date.now() - stored.fetchedAt;
+                if (age < 7 * 24 * 60 * 60 * 1000) return stored.token;
+            }
+        } catch (_e) { /* ignore */ }
+
+        const result = await scrapeWsToken();
+        if (result?.token) {
+            localStorage.setItem("academiq_wstoken", JSON.stringify({
+                token:     result.token,
+                service:   result.service,
+                fetchedAt: Date.now(),
+            }));
+            return result.token;
+        }
+        return null;
+    };
     // We fetch each course page (and its grade report) with the user's session
     // cookies, parse the HTML off-screen, and reuse the same extractors.
     const fetchDocument = async (url) => {
@@ -568,70 +668,72 @@
 const scrapeAllCourses = async () => {
     const origin = window.location.origin;
 
+    // ── Step 1: Discover enrolled courses ─────────────────────────────────
     let courses = [];
-
     for (const path of ["/my/courses.php", "/my/"]) {
         try {
             const listing = await fetchDocument(new URL(path, origin).href);
             courses = getAllCourseLinks(listing, origin);
             if (courses.length) break;
-        } catch (_error) {
-            /* try the next listing */
-        }
+        } catch (_e) { /* try next */ }
     }
-
-    // Fallback: course links present on the current page.
     if (!courses.length) {
         courses = getAllCourseLinks(document, origin);
     }
-
-    // IMPORTANT: send courses AFTER discovery and fallback.
     if (courses.length) {
-        sendMessage(
-            "courses",
-            courses.map(({ course_id, course_name }) => ({
-                course_id: String(course_id),
-                course_name: course_name || `Course ${course_id}`,
-            }))
-        );
+        sendMessage("courses", courses.map(({ course_id, course_name }) => ({
+            course_id: String(course_id),
+            course_name: course_name || `Course ${course_id}`,
+        })));
     }
 
-    let scraped = 0;
+    // ── Step 2: Identity ──────────────────────────────────────────────────
+    const identity = getStudentIdentity();
+    sendMessage("identity", identity);
 
+    // ── Step 3: Try Option B (Web Services API) first ─────────────────────
+    let usedWebService = false;
+    const wstoken = await getOrFetchWsToken();
+    if (wstoken && identity.moodle_user_id) {
+        const wsGrades = await fetchGradesViaWebService(wstoken, identity.moodle_user_id);
+        if (wsGrades && wsGrades.length) {
+            sendMessage("grades", wsGrades);
+            usedWebService = true;
+            console.log(`[AcademIQ] Web Services backfill: ${wsGrades.length} grade records`);
+        }
+    }
+
+    // ── Step 4: Option A — Scrape each course page for materials + grades ─
+    // Always run for materials. Only run grade scraping if WS API failed.
+    let scraped = 0;
     for (const course of courses) {
         try {
             const courseDoc = await fetchDocument(course.url);
             const materials = await extractMaterialsFromCourse(course, courseDoc, course.url);
-
             if (materials.length) {
                 sendMessage("materials", materials);
             }
 
-            try {
-                const gradeUrl = new URL(
-                    `/grade/report/user/index.php?id=${course.course_id}`,
-                    origin
-                ).href;
-
-                const gradeDoc = await fetchDocument(gradeUrl);
-                const grades = extractGradesFromTable(course.course_id, gradeDoc);
-
-                if (grades.length) {
-                    sendMessage("grades", grades);
-                }
-            } catch (_error) {
-                /* grades are optional */
+            // Only scrape grade HTML if Web Services didn't give us grades
+            if (!usedWebService) {
+                try {
+                    const gradeUrl = new URL(
+                        `/grade/report/user/index.php?id=${course.course_id}`,
+                        origin
+                    ).href;
+                    const gradeDoc = await fetchDocument(gradeUrl);
+                    const grades   = extractGradesFromTable(course.course_id, gradeDoc);
+                    if (grades.length) {
+                        sendMessage("grades", grades);
+                    }
+                } catch (_e) { /* grades are optional */ }
             }
 
             scraped += 1;
-        } catch (_error) {
-            /* skip failed course */
-        }
+        } catch (_e) { /* skip failed course */ }
     }
 
-    sendMessage("identity", getStudentIdentity());
-
-    return { courses: courses.length, scraped };
+    return { courses: courses.length, scraped, usedWebService };
 };
 
     // Allow the popup to trigger a full all-courses scan on demand.

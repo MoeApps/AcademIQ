@@ -195,8 +195,12 @@ const mergeGrades = (data, grades) => {
         }
 
         if (itemType.includes("assignment")) {
-            const isSubmitted = /submitted|submitted for grading|graded|done/i.test(grade.submission_status || "");
-            if (isSubmitted) {
+            // Count as submitted if: explicit status says so, OR a numeric grade
+            // exists (means it was graded = was submitted), OR it came from Web Services
+            const hasGrade    = grade.grade && grade.grade !== "-" && grade.grade !== "";
+            const statusOk    = /submitted|submitted for grading|graded|done/i.test(grade.submission_status || "");
+            const fromWS      = grade.source === "webservice";
+            if (statusOk || (hasGrade && fromWS)) {
                 incrementCourseMetric(courseMetrics, "assignment_submissions", grade.course_id, "grades_merge");
             }
         }
