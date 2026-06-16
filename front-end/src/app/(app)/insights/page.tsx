@@ -45,13 +45,19 @@ function InsightsContent() {
         Back to Performance Analysis
       </Link>
 
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Specific Insights</h1>
+<div>
+        <h1 className="text-2xl font-bold text-foreground">Academic Insights</h1>
         <p className="text-muted-foreground">
           {insights
-            ? `${insights.course.code} — ${insights.course.name}`
-            : "Turning model output into feedback you can act on."}
+            ? `Overall behavioural assessment — viewed from ${insights.course.code}`
+            : "Loading insights…"}
         </p>
+        {insights?.scope === "overall" && (
+          <p className="mt-2 text-xs text-muted-foreground/80 italic">
+            Note: This classification reflects your overall academic behaviour across all courses,
+            not this course in isolation. Course-specific stats are on the Performance page.
+          </p>
+        )}
       </div>
 
       {insights ? (

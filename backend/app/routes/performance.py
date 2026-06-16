@@ -10,12 +10,8 @@ from app.services.performance_predict import predict_performance
 
 router = APIRouter(prefix="/api/performance", tags=["Performance"])
 
-def get_latest_features(student_id: str) -> Dict[str, Any]:
-    """Retrieve the most recent feature vector for a student."""
-    doc = feature_vectors_collection.find_one(
-        {"student_id": student_id},
-        sort=[("created_at", -1)]
-    )
+def get_latest_features(academiq_user_id: str) -> Dict[str, Any]:
+    doc = feature_vectors_collection.find_one({"academiq_user_id": academiq_user_id})
     if not doc:
         return None
     return doc.get("features", {})
@@ -63,8 +59,11 @@ async def performance_insights(student_id: str):
         },
         "created_at": datetime.utcnow()
     }
-    ml_results_collection.insert_one(doc)
-
+ml_results_collection.update_one(
+    {"academiq_user_id": academiq_user_id, "model_name": "performance_model_v4"},
+    {"$set": {**doc, "updated_at": datetime.utcnow()}, "$setOnInsert": {"created_at": datetime.utcnow()}},
+    upsert=True,
+)
     # Return what the frontend needs
     return {
         "student_id": student_id,

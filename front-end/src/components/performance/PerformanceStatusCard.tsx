@@ -11,7 +11,13 @@ const COPY: Record<PerformanceStatus, string> = {
   "At Risk": "This course needs attention. Review the insights for what to fix first.",
 };
 
-export function PerformanceStatusCard({ status }: { status: PerformanceStatus }) {
+interface PerformanceStatusCardProps {
+  status: PerformanceStatus;
+  /** Optional label clarifying whether this status is overall or course-specific. */
+  scopeLabel?: string;
+}
+
+export function PerformanceStatusCard({ status, scopeLabel }: PerformanceStatusCardProps) {
   const style = performanceStyle(status);
   return (
     <Card>
@@ -23,9 +29,14 @@ export function PerformanceStatusCard({ status }: { status: PerformanceStatus })
         <CardDescription>From the student-clustering model</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <Badge variant={style.variant} className="text-sm">
-          {status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={style.variant} className="text-sm">
+            {status}
+          </Badge>
+          {scopeLabel && (
+            <span className="text-xs text-muted-foreground italic">({scopeLabel})</span>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground">{COPY[status]}</p>
       </CardContent>
     </Card>

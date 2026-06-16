@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+
 import { api } from "@/lib/api";
 import type { Course, PerformanceAnalysis } from "@/lib/types";
 import { CourseSelect } from "@/components/common/CourseSelect";
@@ -20,16 +21,15 @@ export default function PerformancePage() {
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState("");
 
-useEffect(() => {
-  api.getCourses()
-    .then((list) => {
-      setCourses(list);
-      if (list.length) setSelectedId(list[0].id);
-    })
-    .catch(() => setCoursesError("Could not load courses."))
-    .finally(() => setCoursesLoading(false));
-}, []);
-
+  useEffect(() => {
+    api.getCourses()
+      .then((list) => {
+        setCourses(list);
+        if (list.length) setSelectedId(list[0].id);
+      })
+      .catch(() => setCoursesError("Could not load courses."))
+      .finally(() => setCoursesLoading(false));
+  }, []);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -54,33 +54,36 @@ useEffect(() => {
         </p>
       </div>
 
-{coursesLoading ? (
-  <Skeleton className="h-16 w-full max-w-sm" />
-) : coursesError ? (
-  <div className="rounded-xl border p-6">
-    <h2 className="font-semibold">Could not load courses</h2>
-    <p className="text-sm text-muted-foreground">{coursesError}</p>
-  </div>
-) : courses.length ? (
-  <CourseSelect
-    courses={courses}
-    value={selectedId}
-    onChange={setSelectedId}
-  />
-) : (
-  <div className="rounded-xl border p-6">
-    <h2 className="font-semibold">No courses found</h2>
-    <p className="text-sm text-muted-foreground">
-      Open Moodle, run Scan/Sync from the extension, then refresh this page.
-    </p>
-  </div>
-)}
+      {coursesLoading ? (
+        <Skeleton className="h-16 w-full max-w-sm" />
+      ) : coursesError ? (
+        <div className="rounded-xl border p-6">
+          <h2 className="font-semibold">Could not load courses</h2>
+          <p className="text-sm text-muted-foreground">{coursesError}</p>
+        </div>
+      ) : courses.length ? (
+        <CourseSelect
+          courses={courses}
+          value={selectedId}
+          onChange={setSelectedId}
+        />
+      ) : (
+        <div className="rounded-xl border p-6">
+          <h2 className="font-semibold">No courses found</h2>
+          <p className="text-sm text-muted-foreground">
+            Open Moodle, run Scan/Sync from the extension, then refresh this page.
+          </p>
+        </div>
+      )}
 
       {ready ? (
         <div className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <PredictedGradeCard grade={ready.predictedGrade} />
-            <PerformanceStatusCard status={ready.status} />
+            <PerformanceStatusCard
+              status={ready.status}
+              scopeLabel={ready.statusScope === "overall" ? "Overall academic" : "This course"}
+            />
           </div>
 
           <Link

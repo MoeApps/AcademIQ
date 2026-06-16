@@ -60,14 +60,12 @@ _RISK_LIBRARY = [
 
 def _clean_course_name(name: Optional[str]) -> str:
     name = (name or "").strip()
-    # Moodle often prefixes the breadcrumb link with "Course ".
     if name.lower().startswith("course "):
         name = name[len("course "):].strip()
     return name or "Untitled Course"
 
 
 def _course_code(name: str, course_id: str) -> str:
-    """Derive a short code from the course name (e.g. 'Machine Learning' -> 'ML')."""
     words = [w for w in name.replace("-", " ").split() if w[:1].isalpha()]
     initials = "".join(w[0].upper() for w in words[:3])
     return initials or f"C{course_id}"
@@ -96,7 +94,6 @@ def _avg_percentage(grades: List[Dict[str, Any]], course_id: str = None, item_ty
     return round(sum(vals) / len(vals), 1) if vals else None
 
 
-# Raw behavioural features the performance model expects.
 _PERF_FEATURES = [
     "all_clicks", "active_days", "access_frequency", "material_clicks",
     "quiz_attempts", "assignment_submissions", "total_time_spent",
@@ -105,11 +102,6 @@ _PERF_FEATURES = [
 
 
 def _predict(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Run the real performance model if its deps are installed; else None.
-
-    Lazy import so the API still boots (on heuristics) when the ML stack isn't
-    available (e.g. Python 3.14 without scikit-learn/shap wheels).
-    """
     try:
         from app.services.performance_predict import predict_performance
         raw = {k: features.get(k, 0) for k in _PERF_FEATURES}
@@ -119,11 +111,6 @@ def _predict(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def _predict_grade(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Run the real grade/risk model (TensorFlow) if available; else None.
-
-    Scores are stored 0-1 by the feature pipeline; the grade model trained on
-    0-100, so we rescale the score inputs.
-    """
     try:
         from app.services.grade_risk_predict import predict_grade_and_risk
         req = {
@@ -143,7 +130,6 @@ def _predict_grade(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def _store_prediction(user_id: str, result: Dict[str, Any]) -> None:
-    """Persist the latest model output to ml_results (one per user+model)."""
     try:
         from datetime import datetime
         from app.config.database import ml_results_collection
@@ -166,14 +152,13 @@ def _store_prediction(user_id: str, result: Dict[str, Any]) -> None:
 
 
 def get_courses(user_id: str) -> List[Dict[str, Any]]:
-    """The student's courses (derived from their per-course metrics)."""
     courses = []
     for m in metrics_repository.list_for_user(user_id):
         cid = m.get("course_id")
         if cid == _OVERALL:
             continue
         raw_name = (m.get("metrics") or {}).get("course_name")
-        if not is_real_course(cid, raw_name):  # skip stale 'My courses' (id 1) etc.
+        if not is_real_course(cid, raw_name):
             continue
         name = _clean_course_name(raw_name)
         courses.append({"id": cid, "name": name, "code": _course_code(name, cid)})
@@ -188,7 +173,6 @@ def _course_obj(user_id: str, course_id: str) -> Dict[str, Any]:
 
 
 def get_materials(course_id: str) -> List[Dict[str, Any]]:
-    """Real learning materials for a course (LearningMaterial shape)."""
     out = []
     for doc in material_repository.list_by_course(course_id):
         out.append({
@@ -208,11 +192,10 @@ def get_performance(user_id: str, course_id: str) -> Dict[str, Any]:
     assign_avg = _avg_percentage(grades, course_id, "assignment") or 0.0
 
     feats = _latest_features(user_id)
-    perf = _predict(feats)          # performance model → status
-    grade = _predict_grade(feats)   # grade/risk model → predicted grade (real)
+    perf = _predict(feats)
+    grade = _predict_grade(feats)
     used_model = bool(perf or grade)
 
-    # Predicted grade: prefer the real grade model, then the course average.
     if grade and grade.get("predicted_grade") is not None:
         predicted = round(grade["predicted_grade"])
     elif course_avg:
@@ -220,14 +203,15 @@ def get_performance(user_id: str, course_id: str) -> Dict[str, Any]:
     else:
         predicted = round((perf or {}).get("probability", 0) * 100)
 
-    # Status: prefer the performance model. It classifies "High Performer" at
-    # prob >= 0.5, so mirror that boundary (its probabilities are compressed
-    # near 0.5, so a 0.7 "Good" cutoff would never trigger).
+    # Status is driven by the OVERALL behavioural model (same across courses),
+    # but predictedGrade is computed from this specific course's grades.
     if perf:
         prob = perf.get("probability", 0) or 0
         status = "Good" if prob >= 0.5 else "Average" if prob >= 0.4 else "At Risk"
+        status_scope = "overall"
     else:
         status = "Good" if predicted >= 75 else "Average" if predicted >= 60 else "At Risk"
+        status_scope = "course"
 
     total_seconds = metrics.get("total_time_spent_seconds", 0) or 0
     total_hours = round(total_seconds / 3600, 1)
@@ -236,6 +220,7 @@ def get_performance(user_id: str, course_id: str) -> Dict[str, Any]:
         "course": _course_obj(user_id, course_id),
         "predictedGrade": predicted,
         "status": status,
+        "statusScope": status_scope,
         "courseAverage": course_avg,
         "statistics": {
             "quizzes": {
@@ -251,8 +236,6 @@ def get_performance(user_id: str, course_id: str) -> Dict[str, Any]:
             "totalTimeHours": total_hours,
             "weeklyAverageHours": round(total_hours / 3, 1),
         },
-        # status is model-backed when used_model; predictedGrade is the real
-        # course average either way.
         "heuristic": not used_model,
     }
 
@@ -287,6 +270,7 @@ def get_insights(user_id: str, course_id: str) -> Dict[str, Any]:
             "isHighPerformer": prob >= 0.5,
             "classificationSummary": summary.strip(),
             "riskFactors": model_factors,
+            "scope": "overall",
             "heuristic": False,
         }
 
@@ -315,7 +299,8 @@ def get_insights(user_id: str, course_id: str) -> Dict[str, Any]:
         "isHighPerformer": is_high,
         "classificationSummary": summary,
         "riskFactors": factors,
-        "heuristic": True,  # heuristic until ML risk model is mounted
+        "scope": "overall",
+        "heuristic": True,
     }
 
 
@@ -330,7 +315,6 @@ def get_dashboard(user: Dict[str, Any]) -> Dict[str, Any]:
         scores = [s * 100 for s in (feats.get("avg_quiz_score", 0), feats.get("avg_assignment_score", 0)) if s]
         overall_avg = round(sum(scores) / len(scores), 1) if scores else 0.0
 
-    # Completion heuristic: attempted vs viewed across courses.
     attempted = viewed = 0
     for m in metrics_repository.list_for_user(user_id):
         if m.get("course_id") == _OVERALL:
@@ -342,7 +326,6 @@ def get_dashboard(user: Dict[str, Any]) -> Dict[str, Any]:
         viewed += (mm.get("number_of_quizzes_viewed", 0) or 0) + (mm.get("number_of_assignments_viewed", 0) or 0)
     completion = round(min(100, (attempted / viewed * 100) if viewed else 0), 1)
 
-    # Study-time: split total behavioural time into a simple 3-week trend.
     total_hours = round((feats.get("total_time_spent", 0) or 0) / 3600, 1)
     weekly = round(total_hours / 3, 1)
     study_time = [
@@ -351,7 +334,6 @@ def get_dashboard(user: Dict[str, Any]) -> Dict[str, Any]:
         {"label": "Last week", "hours": round(weekly * 1.2, 1)},
     ]
 
-    # Burnout heuristic: lots of hours concentrated in few active days = risk.
     active_days = feats.get("active_days", 0) or 0
     if total_hours > 20 and active_days < 8:
         level, msg = "High Risk", "High study time concentrated into few active days — pace yourself and rest."
@@ -375,5 +357,5 @@ def get_dashboard(user: Dict[str, Any]) -> Dict[str, Any]:
         },
         "studyTime": study_time,
         "burnout": {"level": level, "message": msg},
-        "heuristic": True,  # studyTime/burnout are heuristic until ML is mounted
+        "heuristic": True,
     }

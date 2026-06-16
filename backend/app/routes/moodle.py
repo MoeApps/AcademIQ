@@ -41,18 +41,18 @@ async def upload_material_content(payload: Dict[str, Any]):
     return {"status": "stored", "material_id": material_id, "chars": len(text)}
 
 
+
 # GET all raw moodle payloads
 @router.get("/raw-moodle-payloads")
 async def get_raw_moodle_payloads():
     try:
-        payloads = list_raw_moodle_payload_serial(raw_moodle_payload_collection.find())
-        return payloads
+        docs = list(raw_moodle_payload_collection.find({}, {"_id": 0}))
+        return docs
     except Exception as e:
         import traceback
         error_msg = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
-
 
 # POST: ingest raw payload, compute features, store both
 @router.post("/raw-moodle-payloads")
