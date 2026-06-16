@@ -6,7 +6,6 @@ from typing import Dict, Any
 import base64
 
 from app.config.database import raw_moodle_payload_collection, feature_vectors_collection, system_events_collection
-from app.schema.schemas import list_raw_moodle_payload_serial
 from app.services.preprocessing import compute_features
 from app.services.moodle_ingest import normalize_payload, slim_payload
 from app.services.user_provisioning import extract_identity, resolve_or_create_user
@@ -63,28 +62,17 @@ async def post_raw_moodle_payload(payload: Dict[str, Any], background_tasks: Bac
     and optionally triggers ML pipeline in background.
     """
     try:
-        # 1. Map this payload to an AcademIQ account (creating one if needed)
-        #    BEFORE storing anything, so every record is linked to a real user.
-        #    Matching is by Moodle User ID, then Student ID — never by name.
         identity = extract_identity(payload)
         academiq_user, was_created = resolve_or_create_user(identity)
         academiq_user_id = str(academiq_user["_id"])
-        # Prefer the account's canonical student id for downstream keying.
         student_id = academiq_user.get("student_id") or identity.get("student_id")
 
-        # 2. Compute the feature vector (reads materials from the payload).
         features = compute_features(payload)
 
-        # 3. Normalize the payload into the deduplicated collections:
-        #    materials are stored ONCE in course_materials (upsert by
-        #    course_id+material_id); metrics and events go to their own
-        #    collections. Materials are never duplicated across structures.
         norm = normalize_payload(payload, academiq_user_id)
 
         now = datetime.utcnow()
 
-        # 4. Upsert ONE slim audit record per student — a re-sync UPDATES the
-        #    same document instead of inserting a new one each time.
         slim = slim_payload(payload)
         raw_moodle_payload_collection.update_one(
             {"academiq_user_id": academiq_user_id},
@@ -100,7 +88,6 @@ async def post_raw_moodle_payload(payload: Dict[str, Any], background_tasks: Bac
         )
         raw_id = str(raw_doc["_id"])
 
-        # 5. Upsert ONE feature vector per student (the current snapshot).
         feature_vectors_collection.update_one(
             {"academiq_user_id": academiq_user_id},
             {
@@ -114,20 +101,19 @@ async def post_raw_moodle_payload(payload: Dict[str, Any], background_tasks: Bac
             },
             upsert=True,
         )
-        # for sys confirm. confirms that moodle data is synced
         system_events_collection.update_one(
-    {"type": "extension_sync"},
-    {
-        "$set": {
-            "type": "extension_sync",
-            "last_sync_at": now,
-            "status": "success",
-            "academiq_user_id": academiq_user_id,
-            "student_id": student_id or features.get("student_id"),
-        }
-    },
-    upsert=True,
-)
+            {"type": "extension_sync"},
+            {
+                "$set": {
+                    "type": "extension_sync",
+                    "last_sync_at": now,
+                    "status": "success",
+                    "academiq_user_id": academiq_user_id,
+                    "student_id": student_id or features.get("student_id"),
+                }
+            },
+            upsert=True,
+        )
         return {
             "inserted_id": raw_id,
             "status": "features_computed",
@@ -169,7 +155,6 @@ async def delete_raw_moodle_payload(id: str):
 
     try:
         result = raw_moodle_payload_collection.delete_one({"_id": oid})
-        # Also consider deleting associated feature vector
         return {"deleted_count": result.deleted_count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")

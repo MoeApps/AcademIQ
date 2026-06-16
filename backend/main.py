@@ -58,14 +58,16 @@ app.include_router(student_data.router)   # /courses, /dashboard, /courses/{id}/
 app.include_router(system_status.router)  # /api/system/status
 app.include_router(ml_result_router)      # /api/ml/result
 
-# ── ML routers — optional, skipped if deps are missing ───────────────────────
+# ── Optional ML routes (student.py) ──────────────────────────────────────────
+# performance.py and todos.py have been deleted (dead code cleanup, see commit).
+# student.py is still guarded because it depends on tensorflow (grade/risk model)
+# which has no wheel for Python 3.13.
 try:
-    from app.routes import student, performance
+    from app.routes import student
     app.include_router(student.router)
-    app.include_router(performance.router)
-    print("[OK] ML routes mounted.")
+    print("[OK] student ML route mounted.")
 except Exception as exc:
-    print(f"[WARN] ML routes NOT mounted (missing deps): {exc}")
+    print(f"[WARN] student ML route NOT mounted (missing deps): {exc}")
 
 
 if __name__ == "__main__":
