@@ -60,12 +60,14 @@ _RISK_LIBRARY = [
 
 def _clean_course_name(name: Optional[str]) -> str:
     name = (name or "").strip()
+    # Moodle often prefixes the breadcrumb link with "Course ".
     if name.lower().startswith("course "):
         name = name[len("course "):].strip()
     return name or "Untitled Course"
 
 
 def _course_code(name: str, course_id: str) -> str:
+    """Derive a short code from the course name (e.g. 'Machine Learning' -> 'ML')."""
     words = [w for w in name.replace("-", " ").split() if w[:1].isalpha()]
     initials = "".join(w[0].upper() for w in words[:3])
     return initials or f"C{course_id}"
@@ -94,6 +96,7 @@ def _avg_percentage(grades: List[Dict[str, Any]], course_id: str = None, item_ty
     return round(sum(vals) / len(vals), 1) if vals else None
 
 
+# Raw behavioural features the performance model expects.
 _PERF_FEATURES = [
     "all_clicks", "active_days", "access_frequency", "material_clicks",
     "quiz_attempts", "assignment_submissions", "total_time_spent",
@@ -102,6 +105,11 @@ _PERF_FEATURES = [
 
 
 def _predict(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Run the real performance model if its deps are installed; else None.
+
+    Lazy import so the API still boots (on heuristics) when the ML stack isn't
+    available (e.g. Python 3.14 without scikit-learn/shap wheels).
+    """
     try:
         from app.services.performance_predict import predict_performance
         raw = {k: features.get(k, 0) for k in _PERF_FEATURES}
@@ -111,6 +119,11 @@ def _predict(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def _predict_grade(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Run the real grade/risk model (TensorFlow) if available; else None.
+
+    Scores are stored 0-1 by the feature pipeline; the grade model trained on
+    0-100, so we rescale the score inputs.
+    """
     try:
         from app.services.grade_risk_predict import predict_grade_and_risk
         req = {
@@ -130,6 +143,7 @@ def _predict_grade(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def _store_prediction(user_id: str, result: Dict[str, Any]) -> None:
+    """Persist the latest model output to ml_results (one per user+model)."""
     try:
         from datetime import datetime
         from app.config.database import ml_results_collection
@@ -152,13 +166,14 @@ def _store_prediction(user_id: str, result: Dict[str, Any]) -> None:
 
 
 def get_courses(user_id: str) -> List[Dict[str, Any]]:
+    """The student's courses (derived from their per-course metrics)."""
     courses = []
     for m in metrics_repository.list_for_user(user_id):
         cid = m.get("course_id")
         if cid == _OVERALL:
             continue
         raw_name = (m.get("metrics") or {}).get("course_name")
-        if not is_real_course(cid, raw_name):
+        if not is_real_course(cid, raw_name):  # skip stale 'My courses' (id 1) etc.
             continue
         name = _clean_course_name(raw_name)
         courses.append({"id": cid, "name": name, "code": _course_code(name, cid)})
@@ -173,6 +188,7 @@ def _course_obj(user_id: str, course_id: str) -> Dict[str, Any]:
 
 
 def get_materials(course_id: str) -> List[Dict[str, Any]]:
+    """Real learning materials for a course (LearningMaterial shape)."""
     out = []
     for doc in material_repository.list_by_course(course_id):
         out.append({
@@ -185,56 +201,73 @@ def get_materials(course_id: str) -> List[Dict[str, Any]]:
 
 def get_performance(user_id: str, course_id: str) -> Dict[str, Any]:
     metrics = (metrics_repository.get(user_id, course_id) or {}).get("metrics", {}) or {}
-    grades = _grades(user_id)
+    grades  = _grades(user_id)
 
-    course_avg = _avg_percentage(grades, course_id) or 0.0
-    quiz_avg = _avg_percentage(grades, course_id, "quiz") or 0.0
-    assign_avg = _avg_percentage(grades, course_id, "assignment") or 0.0
+    # ── Course-specific grade averages (from the real Moodle gradebook) ────
+    course_avg  = _avg_percentage(grades, course_id) or 0.0
+    quiz_avg    = _avg_percentage(grades, course_id, "quiz") or 0.0
+    assign_avg  = _avg_percentage(grades, course_id, "assignment") or 0.0
 
-    feats = _latest_features(user_id)
-    perf = _predict(feats)
-    grade = _predict_grade(feats)
-    used_model = bool(perf or grade)
+    # ── Run global behavioural models ──────────────────────────────────────
+    feats      = _latest_features(user_id)
+    perf       = _predict(feats)        # LightGBM classifier → probability
+    grade_pred = _predict_grade(feats)  # TF grade model → predicted_grade
+    used_model = bool(perf or grade_pred)
 
-    if grade and grade.get("predicted_grade") is not None:
-        predicted = round(grade["predicted_grade"])
+    # ── Predicted grade ────────────────────────────────────────────────────
+    # Priority: (1) TF grade model, (2) real course average, (3) not shown.
+    # We no longer fall back to "probability × 100" — that number is not a
+    # grade and showing it as one (e.g. "81/100") misleads the student.
+    if grade_pred and grade_pred.get("predicted_grade") is not None:
+        predicted: Optional[float] = round(float(grade_pred["predicted_grade"]), 1)
     elif course_avg:
-        predicted = round(course_avg)
+        predicted = round(course_avg, 1)
     else:
-        predicted = round((perf or {}).get("probability", 0) * 100)
+        predicted = None   # frontend will show "No grade data yet"
 
-    # Status is driven by the OVERALL behavioural model (same across courses),
-    # but predictedGrade is computed from this specific course's grades.
+    # ── Status (overall behavioural model, same across all courses) ────────
     if perf:
-        prob = perf.get("probability", 0) or 0
-        status = "Good" if prob >= 0.5 else "Average" if prob >= 0.4 else "At Risk"
+        prob        = float(perf.get("probability", 0) or 0)
+        status      = "Good" if prob >= 0.5 else "Average" if prob >= 0.4 else "At Risk"
         status_scope = "overall"
+    elif predicted is not None:
+        status      = "Good" if predicted >= 75 else "Average" if predicted >= 60 else "At Risk"
+        status_scope = "course"
     else:
-        status = "Good" if predicted >= 75 else "Average" if predicted >= 60 else "At Risk"
+        status      = "Average"
         status_scope = "course"
 
-    total_seconds = metrics.get("total_time_spent_seconds", 0) or 0
-    total_hours = round(total_seconds / 3600, 1)
+    # ── Time on this course (from per-course metrics) ──────────────────────
+    total_seconds = int(metrics.get("total_time_spent_seconds", 0) or 0)
+    total_hours   = round(total_seconds / 3600, 1)
+    # Weekly average: assume a 16-week semester
+    weekly_hours  = round(total_hours / 16, 1)
 
     return {
-        "course": _course_obj(user_id, course_id),
-        "predictedGrade": predicted,
-        "status": status,
-        "statusScope": status_scope,
-        "courseAverage": course_avg,
+        "course":         _course_obj(user_id, course_id),
+        "predictedGrade": predicted,          # None when no data — frontend handles this
+        "status":         status,
+        "statusScope":    status_scope,
+        "courseAverage":  course_avg,
         "statistics": {
             "quizzes": {
-                "attempted": metrics.get("quiz_attempts", 0) or 0,
-                "total": max(metrics.get("number_of_quizzes_viewed", 0) or 0, metrics.get("quiz_attempts", 0) or 0),
-                "averageScore": quiz_avg,
+                "attempted":    int(metrics.get("quiz_attempts", 0) or 0),
+                "total":        max(
+                                    int(metrics.get("number_of_quizzes_viewed", 0) or 0),
+                                    int(metrics.get("quiz_attempts", 0) or 0),
+                                ),
+                "averageScore": round(quiz_avg, 1),
             },
             "assignments": {
-                "attempted": metrics.get("assignment_submissions", 0) or 0,
-                "total": max(metrics.get("number_of_assignments_viewed", 0) or 0, metrics.get("assignment_submissions", 0) or 0),
-                "averageScore": assign_avg,
+                "attempted":    int(metrics.get("assignment_submissions", 0) or 0),
+                "total":        max(
+                                    int(metrics.get("number_of_assignments_viewed", 0) or 0),
+                                    int(metrics.get("assignment_submissions", 0) or 0),
+                                ),
+                "averageScore": round(assign_avg, 1),
             },
-            "totalTimeHours": total_hours,
-            "weeklyAverageHours": round(total_hours / 3, 1),
+            "totalTimeHours":   total_hours,
+            "weeklyAverageHours": weekly_hours,
         },
         "heuristic": not used_model,
     }
@@ -270,7 +303,6 @@ def get_insights(user_id: str, course_id: str) -> Dict[str, Any]:
             "isHighPerformer": prob >= 0.5,
             "classificationSummary": summary.strip(),
             "riskFactors": model_factors,
-            "scope": "overall",
             "heuristic": False,
         }
 
@@ -299,63 +331,80 @@ def get_insights(user_id: str, course_id: str) -> Dict[str, Any]:
         "isHighPerformer": is_high,
         "classificationSummary": summary,
         "riskFactors": factors,
-        "scope": "overall",
-        "heuristic": True,
+        "heuristic": True,  # heuristic until ML risk model is mounted
     }
 
 
 def get_dashboard(user: Dict[str, Any]) -> Dict[str, Any]:
     user_id = str(user["_id"])
-    feats = _latest_features(user_id)
-    grades = _grades(user_id)
+    feats   = _latest_features(user_id)
+    grades  = _grades(user_id)
     courses = get_courses(user_id)
 
+    # ── Average score: real gradebook first, fall back to feature vector ───
     overall_avg = _avg_percentage(grades)
     if overall_avg is None:
-        scores = [s * 100 for s in (feats.get("avg_quiz_score", 0), feats.get("avg_assignment_score", 0)) if s]
-        overall_avg = round(sum(scores) / len(scores), 1) if scores else 0.0
+        raw_scores = [
+            s * 100
+            for s in (feats.get("avg_quiz_score", 0), feats.get("avg_assignment_score", 0))
+            if s
+        ]
+        overall_avg = round(sum(raw_scores) / len(raw_scores), 1) if raw_scores else 0.0
 
-    attempted = viewed = 0
+    # ── Task completion: attempted vs total across all real courses ────────
+    # "total" = number of graded items (grade records) per course.
+    # "attempted" = items with a non-null, non-"-" grade.
+    # We no longer rely on number_of_quizzes_viewed/number_of_assignments_viewed
+    # because those counters are only incremented by live click-tracking and are
+    # often 0 even when the student has submitted work.
+    attempted_count = sum(
+        1 for g in grades
+        if g.get("percentage") is not None
+    )
+    total_count = len(grades)
+    completion  = round((attempted_count / total_count * 100) if total_count else 0.0, 1)
+
+    # ── Study-time trend: use per-course total_time_spent_seconds ─────────
+    # Sum real seconds from student_metrics so the chart isn't fabricated.
+    total_seconds = 0
     for m in metrics_repository.list_for_user(user_id):
         if m.get("course_id") == _OVERALL:
             continue
         if not is_real_course(m.get("course_id"), (m.get("metrics") or {}).get("course_name")):
             continue
-        mm = m.get("metrics", {}) or {}
-        attempted += (mm.get("quiz_attempts", 0) or 0) + (mm.get("assignment_submissions", 0) or 0)
-        viewed += (mm.get("number_of_quizzes_viewed", 0) or 0) + (mm.get("number_of_assignments_viewed", 0) or 0)
-    completion = round(min(100, (attempted / viewed * 100) if viewed else 0), 1)
+        total_seconds += int((m.get("metrics") or {}).get("total_time_spent_seconds", 0) or 0)
 
-    total_hours = round((feats.get("total_time_spent", 0) or 0) / 3600, 1)
-    weekly = round(total_hours / 3, 1)
-    study_time = [
+    total_hours = round(total_seconds / 3600, 1)
+    weekly      = round(total_hours / 16, 1)   # 16-week semester
+    study_time  = [
         {"label": "3 weeks ago", "hours": round(weekly * 0.8, 1)},
         {"label": "2 weeks ago", "hours": round(weekly, 1)},
-        {"label": "Last week", "hours": round(weekly * 1.2, 1)},
+        {"label": "Last week",   "hours": round(weekly * 1.2, 1)},
     ]
 
-    active_days = feats.get("active_days", 0) or 0
+    # ── Burnout heuristic ──────────────────────────────────────────────────
+    active_days = int(feats.get("active_days", 0) or 0)
     if total_hours > 20 and active_days < 8:
-        level, msg = "High Risk", "High study time concentrated into few active days — pace yourself and rest."
+        level, msg = "High Risk",   "High study time concentrated into few active days — pace yourself."
     elif total_hours > 10 and active_days < 10:
-        level, msg = "Medium Risk", "Workload is climbing relative to your active days. Keep an eye on rest."
+        level, msg = "Medium Risk", "Workload is climbing relative to your active days. Watch your rest."
     elif total_hours > 0:
-        level, msg = "Low Risk", "Your workload looks manageable. Maintain a steady pace."
+        level, msg = "Low Risk",    "Your workload looks manageable. Maintain a steady pace."
     else:
-        level, msg = "Safe", "No signs of overload from the current data."
+        level, msg = "Safe",        "No signs of overload from the current data."
 
     return {
         "student": {
-            "id": user_id,
+            "id":       user_id,
             "username": user.get("email", ""),
             "fullName": user.get("full_name", "") or "Student",
         },
         "stats": {
-            "averageScore": overall_avg,
+            "averageScore":      overall_avg,
             "averageCompletion": completion,
-            "enrolledCourses": len(courses),
+            "enrolledCourses":   len(courses),
         },
         "studyTime": study_time,
-        "burnout": {"level": level, "message": msg},
+        "burnout":   {"level": level, "message": msg},
         "heuristic": True,
     }

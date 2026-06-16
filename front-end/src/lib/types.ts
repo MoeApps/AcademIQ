@@ -123,10 +123,15 @@ export interface CourseStatistics {
 /** Course-scoped output combining grade prediction + clustering + actuals. */
 export interface PerformanceAnalysis {
   course: Course;
-  /** Numeric grade from the grade-prediction model (0-100). */
-  predictedGrade: number;
-  /** Categorical status from the clustering model. */
+  /**
+   * Numeric grade (0-100). Null when neither the grade model nor real
+   * gradebook data is available for this course yet.
+   */
+  predictedGrade: number | null;
+  /** Categorical status from the behavioural clustering model. */
   status: PerformanceStatus;
+  /** "overall" = global behavioural model; "course" = derived from course grades. */
+  statusScope?: "overall" | "course";
   /** Student's actual current average across graded Moodle tasks (0-100). */
   courseAverage: number;
   statistics: CourseStatistics;
