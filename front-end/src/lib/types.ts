@@ -223,3 +223,47 @@ export interface EvidenceTimelineResponse {
   timeline: EvidenceTimelineItem[];
   summary: EvidenceTimelineSummary;
 }
+
+// ── Counterfactual Recommendation Engine ────────────────────────────────────
+
+/**
+ * A single "what would need to change" recommendation from the
+ * counterfactual engine. Mirrors the backend's CounterfactualChange schema
+ * (note: `from` is a reserved word in some contexts but is valid as a
+ * TypeScript object key).
+ */
+export interface CounterfactualChange {
+  feature: string;
+  /** The student's current value for this feature. */
+  from: number;
+  /** The target value (high-performer cohort median) for this feature. */
+  to: number;
+  /** to - from, signed. */
+  change: number;
+  /** Human-readable label, e.g. "Quiz attempts". */
+  friendlyLabel: string;
+}
+
+/**
+ * Response shape for GET /counterfactual.
+ *
+ * Answers: "What is the minimum behavioural change needed for this student
+ * to flip from Not High Performer to High Performer?" This is a
+ * what-if projection from the trained model, not a guarantee.
+ */
+export interface CounterfactualResponse {
+  /**
+   * One of: "Already classified as High Performer", "Flip achieved",
+   * "Partial improvement".
+   */
+  status: string;
+  /** The student's current predicted probability of being a High Performer (0-1). */
+  originalProbability: number;
+  /** Projected probability after applying changesNeeded (0-1). */
+  newProbability: number;
+  /** newProbability - originalProbability. */
+  probabilityGain: number;
+  /** Empty when status is "Already classified as High Performer". */
+  changesNeeded: CounterfactualChange[];
+  heuristic: boolean;
+}

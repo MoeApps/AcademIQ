@@ -5,15 +5,18 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ClipboardList } from "lucide-react";
 import { api } from "@/lib/api";
-import type { CourseInsights } from "@/lib/types";
+import type { CourseInsights, CounterfactualResponse } from "@/lib/types";
 import { PerformanceClassification } from "@/components/insights/PerformanceClassification";
 import { RiskFactors } from "@/components/insights/RiskFactors";
+import { CounterfactualCard } from "@/components/insights/CounterfactualCard";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function InsightsContent() {
   const searchParams = useSearchParams();
   const courseParam = searchParams.get("course");
   const [insights, setInsights] = useState<CourseInsights | null>(null);
+  const [counterfactual, setCounterfactual] = useState<CounterfactualResponse | null>(null);
+  const [counterfactualError, setCounterfactualError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +37,39 @@ function InsightsContent() {
       active = false;
     };
   }, [courseParam]);
+
+  useEffect(() => {
+    let active = true;
+
+    // Counterfactual is a global (not course-scoped) endpoint — it reads
+    // the student's latest feature_vectors document directly, the same
+    // source get_insights uses for the overall behavioural model. Fetched
+    // independently of `insights` so a 422 ("no behavioural data yet")
+    // doesn't block the rest of the page from rendering.
+    async function loadCounterfactual() {
+      try {
+        const data = await api.getCounterfactual();
+        if (active) {
+          setCounterfactual(data);
+          setCounterfactualError(null);
+        }
+      } catch (err) {
+        if (active) {
+          setCounterfactual(null);
+          setCounterfactualError(
+            err instanceof Error
+              ? err.message
+              : "Counterfactual projection is currently unavailable.",
+          );
+        }
+      }
+    }
+
+    loadCounterfactual();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -67,6 +103,14 @@ function InsightsContent() {
             summary={insights.classificationSummary}
           />
           <RiskFactors factors={insights.riskFactors} />
+
+          {counterfactual ? (
+            <CounterfactualCard data={counterfactual} />
+          ) : counterfactualError ? (
+            <p className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              {counterfactualError}
+            </p>
+          ) : null}
 
           {/* Link to the Evidence Timeline for deeper behavioural explanation */}
           <Link

@@ -15,6 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import get_current_user
 from app.repositories import material_repository
+from app.schema.counterfactual_schema import (
+    CounterfactualChange,
+    CounterfactualResponse,
+    friendly_label,
+)
 from app.schema.timeline_schema import EvidenceTimelineResponse
 from app.services import quiz_gen, student_data
 from app.services.timeline_service import build_timeline
@@ -86,6 +91,70 @@ def generate_quiz(
         }]
 
     return {"courseId": course_id, "materialIds": material_ids, "questions": questions}
+
+
+# ── Counterfactual Recommendation Engine ────────────────────────────────────
+
+@router.get("/counterfactual", response_model=CounterfactualResponse)
+def counterfactual(user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Return the minimum behavioural changes needed for the authenticated
+    student to flip from Not High Performer to High Performer.
+
+    Uses the student's latest global feature_vectors document (same source
+    as get_insights — not course-scoped, since the underlying performance
+    model is a single cross-course behavioural classifier).
+
+    Returns 422 (not 500) when the student has no behavioural data yet, so
+    the frontend can show "sync the extension first" instead of a crash.
+    """
+    user_id = str(user["_id"])
+    feats = student_data._latest_features(user_id)
+
+    if not feats:
+        raise HTTPException(
+            status_code=422,
+            detail="No behavioural data yet — sync the extension first.",
+        )
+
+    perf = student_data._predict(feats)
+    if not perf:
+        # ML stack unavailable (e.g. missing scikit-learn/lightgbm/shap on
+        # this Python version) — same fallback condition get_insights uses.
+        raise HTTPException(
+            status_code=422,
+            detail="The performance model is currently unavailable on this "
+                   "server, so a counterfactual projection can't be computed.",
+        )
+
+    try:
+        from app.services.counterfactual import find_counterfactual
+        result = find_counterfactual(feats)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Counterfactual computation failed: {exc}",
+        ) from exc
+
+    changes = [
+        CounterfactualChange(
+            feature=feat,
+            **{"from": vals["from"]},
+            to=vals["to"],
+            change=vals["change"],
+            friendlyLabel=friendly_label(feat),
+        )
+        for feat, vals in result.get("changes_needed", {}).items()
+    ]
+
+    return CounterfactualResponse(
+        status=result["status"],
+        originalProbability=result["original_probability"],
+        newProbability=result["new_probability"],
+        probabilityGain=result["probability_gain"],
+        changesNeeded=changes,
+        heuristic=False,
+    )
 
 
 # ── Evidence Timeline ──────────────────────────────────────────────────────────

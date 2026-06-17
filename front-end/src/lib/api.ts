@@ -24,6 +24,7 @@ import type {
   UserInput,
   UserMutationResult,
   EvidenceTimelineResponse,
+  CounterfactualResponse,
 } from "./types";
 
 /**
@@ -255,6 +256,31 @@ export const api = {
     const params = new URLSearchParams({ limit: String(limit) });
     if (courseId) params.set("course_id", courseId);
     return request<EvidenceTimelineResponse>(`/timeline?${params.toString()}`);
+  },
+
+  /**
+   * Counterfactual Recommendation Engine — "what is the minimum behavioural
+   * change needed to flip from Not High Performer to High Performer?"
+   *
+   * This is a what-if projection from the trained model, not a guarantee.
+   * Returns status "Already classified as High Performer" with an empty
+   * changesNeeded list when the student is already there.
+   */
+  async getCounterfactual(): Promise<CounterfactualResponse> {
+    if (USE_MOCK) {
+      return delay<CounterfactualResponse>({
+        status: "Partial improvement",
+        originalProbability: 0.33,
+        newProbability: 0.68,
+        probabilityGain: 0.35,
+        changesNeeded: [
+          { feature: "assignment_submissions", from: 2, to: 9, change: 7, friendlyLabel: "Assignment submissions" },
+          { feature: "quiz_attempts", from: 1, to: 14, change: 13, friendlyLabel: "Quiz attempts" },
+        ],
+        heuristic: false,
+      });
+    }
+    return request<CounterfactualResponse>("/counterfactual");
   },
 };
 export type SystemComponentStatus = {
