@@ -578,9 +578,15 @@ const sanitizePayload = (data) => {
 };
 
 // ── Sync to backend ───────────────────────────────────────────────────────────
-const syncToBackend = async (data) => {
+const syncToBackend = async (data, academiqUserId) => {
   const payload = sanitizePayload(data);
   if (!payload) throw new Error("No data to sync.");
+  // Include the linked AcademIQ account id (set after magic-link login) so the
+  // backend matches this sync to the existing account directly, instead of
+  // falling back to moodle_user_id matching and risking a ghost account.
+  if (academiqUserId) {
+    payload.academiq_user_id = academiqUserId;
+  }
   const res = await fetch(`${apiBaseUrl}${SYNC_ENDPOINT}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -630,7 +636,11 @@ const runSync = async () => {
     const data = await getStorageData();
     if (!data) throw new Error("No Moodle data. Open a Moodle course page first.");
 
-    const result = await syncToBackend(data);
+    // Send the previously-linked AcademIQ account id (set after magic-link
+    // login / a prior successful sync) so the backend matches the existing
+    // account directly instead of risking a ghost account on moodle_user_id
+    // mismatch.
+    const result = await syncToBackend(data, prevStatus.academiq_user_id);
     setProgress(90, "Fetching insights…");
 
     await saveSyncStatus({
@@ -648,6 +658,11 @@ const runSync = async () => {
     setStatus("success");
     setSyncState("success");
     showSyncResult(true, `✓ Synced at ${new Date().toLocaleTimeString()}`);
+
+    if (result?.account_created) {
+      dom.openMsg.textContent = "New account created — link it to your AcademIQ account in Settings";
+      dom.openMsg.classList.remove("hidden");
+    }
   } catch (err) {
     setStatus("error");
     setSyncState("error");

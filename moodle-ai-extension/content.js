@@ -665,76 +665,76 @@
         return Array.from(map.values());
     };
 
-const scrapeAllCourses = async () => {
-    const origin = window.location.origin;
+    const scrapeAllCourses = async () => {
+        const origin = window.location.origin;
 
-    // ── Step 1: Discover enrolled courses ─────────────────────────────────
-    let courses = [];
-    for (const path of ["/my/courses.php", "/my/"]) {
-        try {
-            const listing = await fetchDocument(new URL(path, origin).href);
-            courses = getAllCourseLinks(listing, origin);
-            if (courses.length) break;
-        } catch (_e) { /* try next */ }
-    }
-    if (!courses.length) {
-        courses = getAllCourseLinks(document, origin);
-    }
-    if (courses.length) {
-        sendMessage("courses", courses.map(({ course_id, course_name }) => ({
-            course_id: String(course_id),
-            course_name: course_name || `Course ${course_id}`,
-        })));
-    }
-
-    // ── Step 2: Identity ──────────────────────────────────────────────────
-    const identity = getStudentIdentity();
-    sendMessage("identity", identity);
-
-    // ── Step 3: Try Option B (Web Services API) first ─────────────────────
-    let usedWebService = false;
-    const wstoken = await getOrFetchWsToken();
-    if (wstoken && identity.moodle_user_id) {
-        const wsGrades = await fetchGradesViaWebService(wstoken, identity.moodle_user_id);
-        if (wsGrades && wsGrades.length) {
-            sendMessage("grades", wsGrades);
-            usedWebService = true;
-            console.log(`[AcademIQ] Web Services backfill: ${wsGrades.length} grade records`);
+        // ── Step 1: Discover enrolled courses ─────────────────────────────────
+        let courses = [];
+        for (const path of ["/my/courses.php", "/my/"]) {
+            try {
+                const listing = await fetchDocument(new URL(path, origin).href);
+                courses = getAllCourseLinks(listing, origin);
+                if (courses.length) break;
+            } catch (_e) { /* try next */ }
         }
-    }
+        if (!courses.length) {
+            courses = getAllCourseLinks(document, origin);
+        }
+        if (courses.length) {
+            sendMessage("courses", courses.map(({ course_id, course_name }) => ({
+                course_id: String(course_id),
+                course_name: course_name || `Course ${course_id}`,
+            })));
+        }
 
-    // ── Step 4: Option A — Scrape each course page for materials + grades ─
-    // Always run for materials. Only run grade scraping if WS API failed.
-    let scraped = 0;
-    for (const course of courses) {
-        try {
-            const courseDoc = await fetchDocument(course.url);
-            const materials = await extractMaterialsFromCourse(course, courseDoc, course.url);
-            if (materials.length) {
-                sendMessage("materials", materials);
+        // ── Step 2: Identity ──────────────────────────────────────────────────
+        const identity = getStudentIdentity();
+        sendMessage("identity", identity);
+
+        // ── Step 3: Try Option B (Web Services API) first ─────────────────────
+        let usedWebService = false;
+        const wstoken = await getOrFetchWsToken();
+        if (wstoken && identity.moodle_user_id) {
+            const wsGrades = await fetchGradesViaWebService(wstoken, identity.moodle_user_id);
+            if (wsGrades && wsGrades.length) {
+                sendMessage("grades", wsGrades);
+                usedWebService = true;
+                console.log(`[AcademIQ] Web Services backfill: ${wsGrades.length} grade records`);
             }
+        }
 
-            // Only scrape grade HTML if Web Services didn't give us grades
-            if (!usedWebService) {
-                try {
-                    const gradeUrl = new URL(
-                        `/grade/report/user/index.php?id=${course.course_id}`,
-                        origin
-                    ).href;
-                    const gradeDoc = await fetchDocument(gradeUrl);
-                    const grades   = extractGradesFromTable(course.course_id, gradeDoc);
-                    if (grades.length) {
-                        sendMessage("grades", grades);
-                    }
-                } catch (_e) { /* grades are optional */ }
-            }
+        // ── Step 4: Option A — Scrape each course page for materials + grades ─
+        // Always run for materials. Only run grade scraping if WS API failed.
+        let scraped = 0;
+        for (const course of courses) {
+            try {
+                const courseDoc = await fetchDocument(course.url);
+                const materials = await extractMaterialsFromCourse(course, courseDoc, course.url);
+                if (materials.length) {
+                    sendMessage("materials", materials);
+                }
 
-            scraped += 1;
-        } catch (_e) { /* skip failed course */ }
-    }
+                // Only scrape grade HTML if Web Services didn't give us grades
+                if (!usedWebService) {
+                    try {
+                        const gradeUrl = new URL(
+                            `/grade/report/user/index.php?id=${course.course_id}`,
+                            origin
+                        ).href;
+                        const gradeDoc = await fetchDocument(gradeUrl);
+                        const grades   = extractGradesFromTable(course.course_id, gradeDoc);
+                        if (grades.length) {
+                            sendMessage("grades", grades);
+                        }
+                    } catch (_e) { /* grades are optional */ }
+                }
 
-    return { courses: courses.length, scraped, usedWebService };
-};
+                scraped += 1;
+            } catch (_e) { /* skip failed course */ }
+        }
+
+        return { courses: courses.length, scraped, usedWebService };
+    };
 
     // Allow the popup to trigger a full all-courses scan on demand.
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
