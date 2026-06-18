@@ -64,7 +64,7 @@ export function FeaturesSection() {
   const isInView = useInView(ref, { once: true, margin: "-80px" });
 
   return (
-    <section className="py-24" ref={ref}>
+    <section id="features" className="py-24" ref={ref}>
       <div className="container">
         <motion.div
           className="mb-14 text-center"
