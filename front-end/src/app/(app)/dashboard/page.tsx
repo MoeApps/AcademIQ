@@ -11,6 +11,9 @@ import { QuickStatsCard } from "@/components/dashboard/QuickStatsCard";
 import { StudyTimeTrendChart } from "@/components/dashboard/StudyTimeTrendChart";
 import { BurnoutRiskCard } from "@/components/dashboard/BurnoutRiskCard";
 import { PerformanceTrendChart } from "@/components/dashboard/PerformanceTrendChart";
+import { CourseOverviewRow } from "@/components/dashboard/CourseOverviewRow";
+import { TopRecommendations } from "@/components/dashboard/TopRecommendations";
+import { TrendSnapshotCard } from "@/components/dashboard/TrendSnapshotCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -135,12 +138,8 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      <motion.div
-        custom={1}
-        variants={variants}
-        initial="hidden"
-        animate="visible"
-      >
+      {/* Quick stats */}
+      <motion.div custom={1} variants={variants} initial="hidden" animate="visible">
         {data ? (
           <QuickStatsCard stats={data.stats} />
         ) : (
@@ -148,8 +147,14 @@ export default function DashboardPage() {
         )}
       </motion.div>
 
+      {/* Course overview row */}
+      <motion.div custom={2} variants={variants} initial="hidden" animate="visible">
+        <CourseOverviewRow />
+      </motion.div>
+
+      {/* Charts + Burnout */}
       <motion.div
-        custom={2}
+        custom={3}
         variants={variants}
         initial="hidden"
         animate="visible"
@@ -171,12 +176,8 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      <motion.div
-        custom={3}
-        variants={variants}
-        initial="hidden"
-        animate="visible"
-      >
+      {/* Performance trend chart */}
+      <motion.div custom={4} variants={variants} initial="hidden" animate="visible">
         {predictionHistory ? (
           <PerformanceTrendChart data={predictionHistory} />
         ) : (
@@ -184,9 +185,21 @@ export default function DashboardPage() {
         )}
       </motion.div>
 
+      {/* Trend snapshot + Recommendations side-by-side */}
+      <motion.div
+        custom={5}
+        variants={variants}
+        initial="hidden"
+        animate="visible"
+        className="grid gap-6 lg:grid-cols-2"
+      >
+        <TrendSnapshotCard />
+        <TopRecommendations />
+      </motion.div>
+
       {/* Feature links */}
       <motion.div
-        custom={4}
+        custom={6}
         variants={variants}
         initial="hidden"
         animate="visible"
