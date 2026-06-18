@@ -1,16 +1,21 @@
+"use client";
+
 import { BookOpen, CheckCircle2, GaugeCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import type { DashboardStats } from "@/lib/types";
 
 function Stat({
   icon: Icon,
   label,
   value,
+  suffix,
   hint,
 }: {
   icon: typeof BookOpen;
   label: string;
-  value: string;
+  value: number;
+  suffix?: string;
   hint?: string;
 }) {
   return (
@@ -20,7 +25,18 @@ function Stat({
       </div>
       <div>
         <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-2xl font-bold text-foreground">{value}</p>
+        <p className="text-2xl font-bold text-foreground">
+          <AnimatedNumber
+            value={value}
+            formatFn={(n) => {
+              const formatted = suffix === "%"
+                ? `${n.toFixed(1)}%`
+                : `${Math.round(n)}`;
+              return formatted;
+            }}
+          />
+          {suffix && suffix !== "%" && <span>{suffix}</span>}
+        </p>
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
     </div>
@@ -34,19 +50,21 @@ export function QuickStatsCard({ stats }: { stats: DashboardStats }) {
         <Stat
           icon={GaugeCircle}
           label="Average Score"
-          value={`${stats.averageScore.toFixed(1)}%`}
+          value={stats.averageScore}
+          suffix="%"
           hint="Across graded Moodle tasks"
         />
         <Stat
           icon={CheckCircle2}
           label="Task Completion"
-          value={`${stats.averageCompletion}%`}
+          value={stats.averageCompletion}
+          suffix="%"
           hint="Average across courses"
         />
         <Stat
           icon={BookOpen}
           label="Enrolled Courses"
-          value={`${stats.enrolledCourses}`}
+          value={stats.enrolledCourses}
         />
       </CardContent>
     </Card>

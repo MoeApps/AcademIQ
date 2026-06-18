@@ -68,7 +68,7 @@ export default function AdminUsersPage() {
 
   const handleResetPassword = async (user: AuthUser) => {
     if (!window.confirm(`Reset password for ${user.fullName}?`)) return;
-    const { generatedPassword } = await api.resetPassword(user.id);
+    const { generatedPassword } = await api.adminResetPassword(user.id);
     setNotice(
       generatedPassword
         ? `Password reset. New temporary password: ${generatedPassword}.`

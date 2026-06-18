@@ -9,12 +9,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useReducedMotion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StudyTimePoint } from "@/lib/types";
 
-const PRIMARY = "hsl(252 58% 60%)";
+const PRIMARY = "#6C8EBF";
 
 export function StudyTimeTrendChart({ data }: { data: StudyTimePoint[] }) {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <Card>
       <CardHeader>
@@ -62,6 +65,9 @@ export function StudyTimeTrendChart({ data }: { data: StudyTimePoint[] }) {
                 stroke={PRIMARY}
                 strokeWidth={2}
                 fill="url(#studyFill)"
+                isAnimationActive={!prefersReducedMotion}
+                animationDuration={1200}
+                animationEasing="ease-out"
               />
             </AreaChart>
           </ResponsiveContainer>
