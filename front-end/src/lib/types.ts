@@ -167,6 +167,14 @@ export interface CourseInsights {
   classificationSummary: string;
   /** Risk factors, expected pre-sorted by impact (highest first). */
   riskFactors: RiskFactor[];
+  /**
+   * "overall" = global behavioural model across all courses; "course" =
+   * derived for this course specifically. Read by insights/page.tsx to
+   * show a clarifying note — was previously referenced there without
+   * being declared here, which is a real `strict` TS error caught while
+   * syncing with the repo (see chat notes).
+   */
+  scope?: "overall" | "course";
 }
 
 /** A learning material title scraped from Moodle, selectable for quiz gen. */
@@ -266,4 +274,47 @@ export interface CounterfactualResponse {
   /** Empty when status is "Already classified as High Performer". */
   changesNeeded: CounterfactualChange[];
   heuristic: boolean;
+}
+
+// ── Prediction History & Trend ──────────────────────────────────────────────
+
+/**
+ * A single point on the performance-probability history sparkline.
+ * Mirrors the backend's `PredictionHistoryPoint` schema. Returned
+ * oldest-to-newest, capped at the most recent 30 snapshots per student.
+ */
+export interface PredictionHistoryPoint {
+  /** ISO 8601 datetime string from the backend (`recorded_at`). */
+  date: string;
+  /** Predicted High-Performer probability at this point in time (0-1). */
+  probability: number;
+  classification: string;
+}
+
+/** improving/declining/stable, derived backend-side with a ±0.01 threshold. */
+export type TrendDirection = "improving" | "declining" | "stable";
+
+/**
+ * Response shape for GET /prediction-trend.
+ *
+ * `hasEnoughData` is the only field guaranteed to be present — it is `false`
+ * (with every other field omitted) until the student has at least two
+ * prediction snapshots recorded.
+ */
+export interface PredictionTrendResponse {
+  hasEnoughData: boolean;
+  direction?: TrendDirection;
+  /** toProbability - fromProbability, signed. */
+  deltaProbability?: number;
+  /**
+   * Human-readable summary phrased as a signed-SHAP-delta contribution
+   * between the two most recent snapshots (e.g. "a stronger contribution
+   * from quiz attempts") — never a raw-behaviour-direction claim, since
+   * only `shap_map` is stored server-side, not raw feature values.
+   */
+  summary?: string;
+  fromProbability?: number;
+  toProbability?: number;
+  fromDate?: string;
+  toDate?: string;
 }

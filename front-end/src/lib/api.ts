@@ -25,6 +25,8 @@ import type {
   UserMutationResult,
   EvidenceTimelineResponse,
   CounterfactualResponse,
+  PredictionHistoryPoint,
+  PredictionTrendResponse,
 } from "./types";
 
 /**
@@ -282,7 +284,46 @@ export const api = {
     }
     return request<CounterfactualResponse>("/counterfactual");
   },
+
+  /**
+   * Prediction History — up to the most recent 30 performance-probability
+   * snapshots for the student, oldest first. Powers the dashboard's
+   * performance trend chart.
+   */
+  async getPredictionHistory(): Promise<PredictionHistoryPoint[]> {
+    if (USE_MOCK) {
+      return delay<PredictionHistoryPoint[]>([
+        { date: "2026-05-01T00:00:00Z", probability: 0.41, classification: "Not High Performer" },
+        { date: "2026-05-08T00:00:00Z", probability: 0.47, classification: "Not High Performer" },
+        { date: "2026-05-15T00:00:00Z", probability: 0.58, classification: "Not High Performer" },
+        { date: "2026-05-22T00:00:00Z", probability: 0.66, classification: "High Performer" },
+      ]);
+    }
+    return request<PredictionHistoryPoint[]>("/prediction-history");
+  },
+
+  /**
+   * Prediction Trend — direction plus a narrative summary comparing the
+   * student's two most recent prediction snapshots. `hasEnoughData` is
+   * `false` until the student has synced (and been scored) at least twice.
+   */
+  async getPredictionTrend(): Promise<PredictionTrendResponse> {
+    if (USE_MOCK) {
+      return delay<PredictionTrendResponse>({
+        hasEnoughData: true,
+        direction: "improving",
+        deltaProbability: 0.08,
+        summary: "a stronger contribution from quiz attempts",
+        fromProbability: 0.58,
+        toProbability: 0.66,
+        fromDate: "2026-05-15T00:00:00Z",
+        toDate: "2026-05-22T00:00:00Z",
+      });
+    }
+    return request<PredictionTrendResponse>("/prediction-trend");
+  },
 };
+
 export type SystemComponentStatus = {
   connected?: boolean;
   loaded?: boolean;

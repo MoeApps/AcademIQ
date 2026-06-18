@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, FileQuestion, LineChart } from "lucide-react";
 import { api } from "@/lib/api";
-import type { DashboardData } from "@/lib/types";
+import type { DashboardData, PredictionHistoryPoint } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
 import { QuickStatsCard } from "@/components/dashboard/QuickStatsCard";
 import { StudyTimeTrendChart } from "@/components/dashboard/StudyTimeTrendChart";
 import { BurnoutRiskCard } from "@/components/dashboard/BurnoutRiskCard";
+import { PerformanceTrendChart } from "@/components/dashboard/PerformanceTrendChart";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -30,11 +31,24 @@ const FEATURE_LINKS = [
 export default function DashboardPage() {
   const { user } = useUser();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [predictionHistory, setPredictionHistory] = useState<PredictionHistoryPoint[] | null>(
+    null,
+  );
 
   useEffect(() => {
     let active = true;
     api.getDashboard().then((d) => {
       if (active) setData(d);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api.getPredictionHistory().then((history) => {
+      if (active) setPredictionHistory(history);
     });
     return () => {
       active = false;
@@ -76,6 +90,12 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {predictionHistory ? (
+        <PerformanceTrendChart data={predictionHistory} />
+      ) : (
+        <Skeleton className="h-80 w-full" />
+      )}
 
       <div className="grid gap-6 sm:grid-cols-2">
         {FEATURE_LINKS.map(({ href, icon: Icon, title, description }) => (

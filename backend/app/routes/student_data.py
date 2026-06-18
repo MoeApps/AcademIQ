@@ -20,8 +20,12 @@ from app.schema.counterfactual_schema import (
     CounterfactualResponse,
     friendly_label,
 )
+from app.schema.prediction_history_schema import (
+    PredictionHistoryPoint,
+    PredictionTrendResponse,
+)
 from app.schema.timeline_schema import EvidenceTimelineResponse
-from app.services import quiz_gen, student_data
+from app.services import prediction_history, quiz_gen, student_data
 from app.services.timeline_service import build_timeline
 
 router = APIRouter(tags=["Student data"])
@@ -155,6 +159,45 @@ def counterfactual(user: Dict[str, Any] = Depends(get_current_user)):
         changesNeeded=changes,
         heuristic=False,
     )
+
+
+# ── Prediction History & Trend ──────────────────────────────────────────────
+# Built alongside the Counterfactual engine above so the two stay consistent:
+# both read from the same model_name ("performance_model_v4") and the same
+# friendly_label() mapping for feature names shown to the student.
+
+@router.get("/prediction-history", response_model=List[PredictionHistoryPoint])
+def get_prediction_history(user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Return the authenticated student's prediction-probability history,
+    oldest-to-newest, for the "performance over time" dashboard chart.
+
+    Returns an empty list (not an error) for students with no recorded
+    history yet — an expected state, not a failure.
+    """
+    user_id = str(user["_id"])
+    docs = prediction_history.get_history(user_id)
+    return [
+        {
+            "date": d["recorded_at"],
+            "probability": d["probability"],
+            "classification": d.get("classification") or "",
+        }
+        for d in docs
+    ]
+
+
+@router.get("/prediction-trend", response_model=PredictionTrendResponse)
+def get_prediction_trend(user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Return a one-sentence explanation of what changed between the student's
+    two most recent prediction snapshots and why (SHAP-delta driven).
+
+    Returns hasEnoughData=False (200, not an error) when fewer than two
+    history entries exist yet — expected for new/recently-synced students.
+    """
+    user_id = str(user["_id"])
+    return prediction_history.get_trend_summary(user_id)
 
 
 # ── Evidence Timeline ──────────────────────────────────────────────────────────

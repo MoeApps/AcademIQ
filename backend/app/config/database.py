@@ -27,6 +27,10 @@ courses_collection               = db["courses_collection"]
 raw_moodle_payload_collection    = db["raw_moodle_payload_collection"]
 feature_vectors_collection       = db["feature_vectors"]
 ml_results_collection            = db["ml_results"]
+# Append-only prediction history (one doc per recorded snapshot, capped at
+# 30/user) — separate from ml_results, which is upsert-by-(user, model) and
+# structurally holds only the latest snapshot. See services/prediction_history.py.
+ml_results_history_collection    = db["ml_results_history"]
 auth_sessions_collection         = db["sessions"]
 
 # AcademIQ user accounts (admins + students).
@@ -132,3 +136,18 @@ def ensure_indexes() -> None:
             )
         except Exception as exc:
             print(f"[WARN] could not create {name} (resolve duplicates first): {exc}")
+
+    # ── ML prediction history ────────────────────────────────────────────
+    # Compound index covers both query directions this collection needs:
+    # "last N for this user" (descending — dedup check + cap logic in
+    # prediction_history.record_prediction) and "oldest-to-newest" (ascending
+    # — prediction_history.get_history for charting). Mongo can walk a
+    # compound index in either direction, so one index serves both instead
+    # of paying write overhead for two.
+    try:
+        ml_results_history_collection.create_index(
+            [("academiq_user_id", ASCENDING), ("recorded_at", ASCENDING)],
+            name="user_recorded_at",
+        )
+    except Exception as exc:
+        print(f"[WARN] could not create user_recorded_at index: {exc}")
