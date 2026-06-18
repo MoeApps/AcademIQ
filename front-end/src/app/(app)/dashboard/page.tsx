@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, FileQuestion, LineChart } from "lucide-react";
+import { ArrowRight, FileQuestion, LineChart, Brain, Sparkles } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { api } from "@/lib/api";
 import type { DashboardData, PredictionHistoryPoint } from "@/lib/types";
@@ -20,12 +20,21 @@ const FEATURE_LINKS = [
     icon: LineChart,
     title: "Performance Analysis",
     description: "Predicted grades, status, and per-course statistics.",
+    color: "var(--brand-steel)",
+  },
+  {
+    href: "/insights",
+    icon: Brain,
+    title: "AI Insights",
+    description: "Risk factors, classification, and counterfactual analysis.",
+    color: "var(--brand-medblue)",
   },
   {
     href: "/quiz",
     icon: FileQuestion,
     title: "Quiz Generation",
     description: "Generate practice quizzes from your lecture materials.",
+    color: "var(--brand-green)",
   },
 ];
 
@@ -90,10 +99,10 @@ export default function DashboardPage() {
         variants={variants}
         initial="hidden"
         animate="visible"
-        className="relative overflow-hidden rounded-xl px-6 py-8"
+        className="relative overflow-hidden rounded-xl px-6 py-8 md:px-8 md:py-10"
         style={{
           background:
-            "linear-gradient(135deg, var(--brand-navy) 0%, var(--brand-steel) 100%)",
+            "linear-gradient(135deg, var(--brand-navy-deep) 0%, var(--brand-navy) 40%, var(--brand-steel) 100%)",
         }}
       >
         <div
@@ -103,12 +112,27 @@ export default function DashboardPage() {
               "radial-gradient(circle at 70% 30%, white 0%, transparent 60%)",
           }}
         />
-        <h1 className="relative text-2xl font-bold text-white">
-          Welcome back, {firstName}
-        </h1>
-        <p className="relative mt-1 text-white/70">
-          Here&apos;s a one-glance overview of your academic health.
-        </p>
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, white 1px, transparent 1px)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+        <div className="relative flex items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
+            <Sparkles className="h-7 w-7 text-[var(--brand-steel-light)]" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white md:text-3xl">
+              Welcome back, {firstName}
+            </h1>
+            <p className="mt-1 text-white/60">
+              Here&apos;s a one-glance overview of your academic health.
+            </p>
+          </div>
+        </div>
       </motion.div>
 
       <motion.div
@@ -160,19 +184,23 @@ export default function DashboardPage() {
         )}
       </motion.div>
 
+      {/* Feature links */}
       <motion.div
         custom={4}
         variants={variants}
         initial="hidden"
         animate="visible"
-        className="grid gap-6 sm:grid-cols-2"
+        className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
       >
-        {FEATURE_LINKS.map(({ href, icon: Icon, title, description }) => (
+        {FEATURE_LINKS.map(({ href, icon: Icon, title, description, color }) => (
           <Link key={href} href={href} className="group">
-            <Card className="h-full transition-all hover:border-primary/50 hover:shadow-lg">
-              <CardContent className="flex items-center gap-4 p-6">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <Icon className="h-6 w-6 text-primary" />
+            <Card className="h-full transition-all hover:border-[var(--brand-steel)]/40 hover:shadow-lg hover:-translate-y-0.5">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                  style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}
+                >
+                  <Icon className="h-5 w-5" style={{ color }} />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground">{title}</h3>
