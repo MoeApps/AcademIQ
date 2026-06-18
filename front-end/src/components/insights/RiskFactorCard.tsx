@@ -1,7 +1,8 @@
 "use client";
 
-import { Lightbulb } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+import { Lightbulb, ArrowRight } from "lucide-react";
+import { motion, useReducedMotion, useInView } from "framer-motion";
+import { useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { RiskFactor } from "@/lib/types";
 
@@ -12,12 +13,8 @@ function riskLevel(impact: number): {
   badge: "destructive" | "warning" | "default";
   color: string;
 } {
-  if (impact >= 60) {
-    return { level: "High", badge: "destructive", color: "#ef4444" };
-  }
-  if (impact >= 35) {
-    return { level: "Medium", badge: "warning", color: "var(--brand-orange)" };
-  }
+  if (impact >= 60) return { level: "High", badge: "destructive", color: "#ef4444" };
+  if (impact >= 35) return { level: "Medium", badge: "warning", color: "var(--brand-orange)" };
   return { level: "Low", badge: "default", color: "var(--brand-steel)" };
 }
 
@@ -30,50 +27,71 @@ interface Props {
 export function RiskFactorCard({ rank, factor, index }: Props) {
   const { level, badge, color } = riskLevel(factor.impact);
   const prefersReducedMotion = useReducedMotion();
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: "-30px" });
 
   return (
     <motion.div
-      initial={prefersReducedMotion ? {} : { opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: 0.4,
-        delay: index * 0.08,
-        ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number],
-      }}
-      className="overflow-hidden rounded-xl border border-border bg-background"
+      ref={ref}
+      initial={prefersReducedMotion ? {} : { opacity: 0, y: 16 }}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
+      transition={
+        prefersReducedMotion
+          ? { duration: 0 }
+          : { duration: 0.5, delay: index * 0.08, ease: [0.25, 1, 0.5, 1] as [number, number, number, number] }
+      }
+      className="group/risk relative overflow-hidden rounded-2xl border border-border/60 bg-background transition-all duration-200 hover:border-border hover:shadow-md"
     >
-      <div className="p-4 sm:p-5">
+      {/* Hover glow */}
+      <div
+        className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full opacity-0 blur-2xl transition-opacity duration-500 group-hover/risk:opacity-[0.12]"
+        style={{ background: color }}
+      />
+
+      <div className="relative p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <span
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+            <motion.span
+              initial={prefersReducedMotion ? {} : { scale: 0 }}
+              animate={inView ? { scale: 1 } : {}}
+              transition={
+                prefersReducedMotion
+                  ? { duration: 0 }
+                  : { type: "spring" as const, stiffness: 300, damping: 20, delay: index * 0.08 + 0.15 }
+              }
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm"
               style={{ background: color }}
             >
               {rank}
-            </span>
-            <p className="font-semibold text-foreground">{factor.title}</p>
+            </motion.span>
+            <div>
+              <p className="font-semibold text-foreground">{factor.title}</p>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                {factor.description}
+              </p>
+            </div>
           </div>
-          <Badge variant={badge} className="shrink-0">
+          <Badge variant={badge} className="shrink-0 font-bold">
             {level} · {factor.impact}
           </Badge>
         </div>
 
-        <p className="mt-2 text-sm text-muted-foreground sm:ml-10">
-          {factor.description}
-        </p>
-
         {/* Impact bar */}
-        <div className="mt-3 sm:ml-10">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className="mt-4 ml-11">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <span>Impact</span>
+            <span>{factor.impact}%</span>
+          </div>
+          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted/50">
             <motion.div
               className="h-full rounded-full"
-              style={{ background: color }}
+              style={{ background: `linear-gradient(90deg, ${color}, color-mix(in srgb, ${color} 70%, white))` }}
               initial={prefersReducedMotion ? { width: `${factor.impact}%` } : { width: 0 }}
-              animate={{ width: `${factor.impact}%` }}
+              animate={inView ? { width: `${factor.impact}%` } : {}}
               transition={
                 prefersReducedMotion
                   ? { duration: 0 }
-                  : { duration: 0.8, delay: index * 0.08 + 0.2, ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number] }
+                  : { duration: 1, delay: index * 0.08 + 0.25, ease: [0.25, 1, 0.5, 1] as [number, number, number, number] }
               }
             />
           </div>
@@ -82,18 +100,23 @@ export function RiskFactorCard({ rank, factor, index }: Props) {
 
       {/* Recommendation strip */}
       <div
-        className="flex items-start gap-3 border-t px-4 py-3 sm:px-5"
+        className="flex items-start gap-3 border-t px-5 py-4"
         style={{
-          borderColor: `color-mix(in srgb, var(--brand-steel) 15%, transparent)`,
-          background: "color-mix(in srgb, var(--brand-steel) 4%, transparent)",
+          borderColor: `color-mix(in srgb, var(--brand-steel) 12%, transparent)`,
+          background: "color-mix(in srgb, var(--brand-steel) 3%, transparent)",
         }}
       >
-        <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand-steel)]" />
-        <div>
+        <div
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+          style={{ background: "color-mix(in srgb, var(--brand-steel) 12%, transparent)" }}
+        >
+          <Lightbulb className="h-3 w-3 text-[var(--brand-steel)]" />
+        </div>
+        <div className="flex-1">
           <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--brand-steel)]">
             Recommendation
           </p>
-          <p className="text-sm text-foreground">{factor.recommendation}</p>
+          <p className="mt-0.5 text-sm leading-relaxed text-foreground/80">{factor.recommendation}</p>
         </div>
       </div>
     </motion.div>
