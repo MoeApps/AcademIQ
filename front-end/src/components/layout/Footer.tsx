@@ -1,15 +1,28 @@
+"use client";
+
 import { GraduationCap } from "lucide-react";
+import { motion, useReducedMotion, useInView } from "framer-motion";
+import { useRef } from "react";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
+  const prefersReducedMotion = useReducedMotion();
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-40px" });
 
   return (
-    <footer className="bg-footer text-footer-foreground">
+    <motion.footer
+      ref={ref}
+      initial={prefersReducedMotion ? {} : { opacity: 0 }}
+      animate={isInView ? { opacity: 1 } : {}}
+      transition={{ duration: 0.6 }}
+      className="bg-footer text-footer-foreground"
+    >
       <div className="container py-12">
         <div className="grid gap-8 md:grid-cols-3">
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <GraduationCap className="h-6 w-6" />
+              <GraduationCap className="h-6 w-6 text-[var(--brand-steel-light)]" />
               <span className="text-lg font-semibold">AcademIQ</span>
             </div>
             <p className="text-sm text-footer-foreground/70">
@@ -55,6 +68,6 @@ export function Footer() {
           </p>
         </div>
       </div>
-    </footer>
+    </motion.footer>
   );
 }

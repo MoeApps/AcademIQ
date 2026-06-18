@@ -17,10 +17,10 @@
 */
 
 :root {
-  --background: 210 33% 96%;
+  --background: 210 20% 97%;
   --foreground: 0 0% 17%;
 
-  --card: 210 30% 98%;
+  --card: 0 0% 100%;
   --card-foreground: 0 0% 17%;
 
   --popover: 0 0% 100%;
@@ -29,25 +29,25 @@
   --primary: 196 58% 43%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 216 35% 90%;
-  --secondary-foreground: 0 0% 17%;
+  --secondary: 216 30% 94%;
+  --secondary-foreground: 207 53% 23%;
 
-  --muted: 210 25% 92%;
-  --muted-foreground: 207 20% 45%;
+  --muted: 210 20% 93%;
+  --muted-foreground: 207 15% 40%;
 
-  --accent: 216 35% 92%;
-  --accent-foreground: 0 0% 17%;
+  --accent: 196 30% 93%;
+  --accent-foreground: 207 53% 23%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 84% 50%;
   --destructive-foreground: 0 0% 100%;
 
-  --success: 148 51% 47%;
+  --success: 148 51% 42%;
   --success-foreground: 0 0% 100%;
-  --warning: 23 74% 55%;
+  --warning: 23 80% 50%;
   --warning-foreground: 0 0% 100%;
 
-  --border: 210 25% 86%;
-  --input: 210 25% 86%;
+  --border: 210 18% 82%;
+  --input: 210 18% 82%;
   --ring: 196 58% 43%;
 
   --radius: 0.75rem;
@@ -57,9 +57,10 @@
   --auth-start: 207 53% 18%;
   --auth-end: 207 53% 10%;
 
-  /* Brand tokens for direct use in inline styles / custom classes */
   --brand-navy: #1B3A5C;
+  --brand-navy-deep: #122840;
   --brand-steel: #2E86AB;
+  --brand-steel-light: #3a9fc7;
   --brand-orange: #E07B39;
   --brand-green: #3BB273;
   --brand-offwhite: #F0F4F8;
@@ -68,26 +69,26 @@
 }
 
 .dark {
-  --background: 207 40% 8%;
-  --foreground: 210 33% 95%;
+  --background: 207 40% 7%;
+  --foreground: 210 25% 92%;
 
-  --card: 207 35% 12%;
-  --card-foreground: 210 33% 95%;
+  --card: 207 35% 11%;
+  --card-foreground: 210 25% 92%;
 
-  --popover: 207 35% 12%;
-  --popover-foreground: 210 33% 95%;
+  --popover: 207 35% 11%;
+  --popover-foreground: 210 25% 92%;
 
   --primary: 196 58% 43%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 207 30% 18%;
-  --secondary-foreground: 210 33% 95%;
+  --secondary: 207 30% 16%;
+  --secondary-foreground: 210 25% 90%;
 
-  --muted: 207 30% 18%;
-  --muted-foreground: 207 20% 60%;
+  --muted: 207 25% 16%;
+  --muted-foreground: 207 15% 55%;
 
-  --accent: 207 30% 18%;
-  --accent-foreground: 210 33% 95%;
+  --accent: 207 25% 16%;
+  --accent-foreground: 210 25% 92%;
 
   --destructive: 0 62% 40%;
   --destructive-foreground: 0 0% 100%;
@@ -97,8 +98,8 @@
   --warning: 23 74% 50%;
   --warning-foreground: 0 0% 100%;
 
-  --border: 207 30% 20%;
-  --input: 207 30% 20%;
+  --border: 207 25% 22%;
+  --input: 207 25% 22%;
   --ring: 196 58% 43%;
 
   --footer-bg: 207 53% 5%;
@@ -107,7 +108,9 @@
   --auth-end: 207 53% 5%;
 
   --brand-navy: #1B3A5C;
+  --brand-navy-deep: #122840;
   --brand-steel: #2E86AB;
+  --brand-steel-light: #3a9fc7;
   --brand-orange: #E07B39;
   --brand-green: #3BB273;
   --brand-offwhite: #F0F4F8;
