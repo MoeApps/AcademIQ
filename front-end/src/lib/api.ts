@@ -174,7 +174,7 @@ export const api = {
     await request<void>(`/api/admin/users/${id}`, { method: "DELETE" });
   },
 
-  async resetPassword(
+  async adminResetPassword(
     id: string,
     password?: string,
   ): Promise<{ generatedPassword?: string }> {

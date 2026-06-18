@@ -5,90 +5,117 @@
   Colors are HSL channel values (no hsl() wrapper) so they can be composed
   with alpha in utilities, e.g. bg-primary/10. Mapped to Tailwind v4 tokens
   in the @theme inline block below.
+
+  Brand palette:
+  - Deep navy:    #1B3A5C  → 207 53% 23%
+  - Steel blue:   #2E86AB  → 196 58% 43%   ← primary accent
+  - Burnt orange: #E07B39  → 23  74% 55%   ← highlight / CTA
+  - Muted green:  #3BB273  → 148 51% 47%   ← success / improving
+  - Off-white:    #F0F4F8  → 210 33% 96%   ← background
+  - Near-black:   #2C2C2C  → 0   0%  17%   ← text
+  - Medium blue:  #6C8EBF  → 216 35% 59%   ← secondary
 */
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 248 30% 15%;
+  --background: 210 20% 97%;
+  --foreground: 0 0% 17%;
 
-  --card: 252 30% 96%;
-  --card-foreground: 248 30% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 17%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 248 30% 15%;
+  --popover-foreground: 0 0% 17%;
 
-  --primary: 252 58% 60%;
+  --primary: 196 58% 43%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 252 30% 94%;
-  --secondary-foreground: 248 30% 15%;
+  --secondary: 216 30% 94%;
+  --secondary-foreground: 207 53% 23%;
 
-  --muted: 252 20% 94%;
-  --muted-foreground: 248 15% 45%;
+  --muted: 210 20% 93%;
+  --muted-foreground: 207 15% 40%;
 
-  --accent: 252 40% 92%;
-  --accent-foreground: 248 30% 15%;
+  --accent: 196 30% 93%;
+  --accent-foreground: 207 53% 23%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 84% 50%;
   --destructive-foreground: 0 0% 100%;
 
-  /* Status palette (burnout / performance) */
-  --success: 142 71% 45%;
+  --success: 148 51% 42%;
   --success-foreground: 0 0% 100%;
-  --warning: 38 92% 50%;
+  --warning: 23 80% 50%;
   --warning-foreground: 0 0% 100%;
 
-  --border: 252 20% 88%;
-  --input: 252 20% 88%;
-  --ring: 252 58% 60%;
+  --border: 210 18% 82%;
+  --input: 210 18% 82%;
+  --ring: 196 58% 43%;
 
   --radius: 0.75rem;
 
-  /* Landing / auth custom tokens */
-  --footer-bg: 0 0% 8%;
-  --footer-foreground: 0 0% 95%;
-  --auth-start: 0 0% 18%;
-  --auth-end: 0 0% 6%;
+  --footer-bg: 207 53% 12%;
+  --footer-foreground: 210 33% 95%;
+  --auth-start: 207 53% 18%;
+  --auth-end: 207 53% 10%;
+
+  --brand-navy: #1B3A5C;
+  --brand-navy-deep: #122840;
+  --brand-steel: #2E86AB;
+  --brand-steel-light: #3a9fc7;
+  --brand-orange: #E07B39;
+  --brand-green: #3BB273;
+  --brand-offwhite: #F0F4F8;
+  --brand-nearblack: #2C2C2C;
+  --brand-medblue: #6C8EBF;
 }
 
 .dark {
-  --background: 248 30% 8%;
-  --foreground: 0 0% 95%;
+  --background: 207 40% 7%;
+  --foreground: 210 25% 92%;
 
-  --card: 248 30% 12%;
-  --card-foreground: 0 0% 95%;
+  --card: 207 35% 11%;
+  --card-foreground: 210 25% 92%;
 
-  --popover: 248 30% 12%;
-  --popover-foreground: 0 0% 95%;
+  --popover: 207 35% 11%;
+  --popover-foreground: 210 25% 92%;
 
-  --primary: 252 58% 60%;
+  --primary: 196 58% 43%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 248 25% 18%;
-  --secondary-foreground: 0 0% 95%;
+  --secondary: 207 30% 16%;
+  --secondary-foreground: 210 25% 90%;
 
-  --muted: 248 25% 18%;
-  --muted-foreground: 248 15% 60%;
+  --muted: 207 25% 16%;
+  --muted-foreground: 207 15% 55%;
 
-  --accent: 248 25% 18%;
-  --accent-foreground: 0 0% 95%;
+  --accent: 207 25% 16%;
+  --accent-foreground: 210 25% 92%;
 
   --destructive: 0 62% 40%;
   --destructive-foreground: 0 0% 100%;
 
-  --success: 142 60% 45%;
+  --success: 148 45% 42%;
   --success-foreground: 0 0% 100%;
-  --warning: 38 92% 55%;
+  --warning: 23 74% 50%;
   --warning-foreground: 0 0% 100%;
 
-  --border: 248 25% 20%;
-  --input: 248 25% 20%;
-  --ring: 252 58% 60%;
+  --border: 207 25% 22%;
+  --input: 207 25% 22%;
+  --ring: 196 58% 43%;
 
-  --footer-bg: 0 0% 4%;
-  --footer-foreground: 0 0% 90%;
-  --auth-start: 0 0% 14%;
-  --auth-end: 0 0% 4%;
+  --footer-bg: 207 53% 5%;
+  --footer-foreground: 210 33% 90%;
+  --auth-start: 207 53% 14%;
+  --auth-end: 207 53% 5%;
+
+  --brand-navy: #1B3A5C;
+  --brand-navy-deep: #122840;
+  --brand-steel: #2E86AB;
+  --brand-steel-light: #3a9fc7;
+  --brand-orange: #E07B39;
+  --brand-green: #3BB273;
+  --brand-offwhite: #F0F4F8;
+  --brand-nearblack: #2C2C2C;
+  --brand-medblue: #6C8EBF;
 }
 
 @theme inline {
