@@ -7,7 +7,7 @@ from nltk.stem import WordNetLemmatizer
 
 
 class ConceptExtractor:
-    """Extract meaningful management concepts and definitions from text."""
+    """Extract key concepts and definitions from text across any domain."""
 
     def __init__(self):
         try:
@@ -39,6 +39,12 @@ class ConceptExtractor:
             'include', 'includes', 'including', 'involves', 'involving',
             'refer', 'refers', 'provide', 'provides', 'show', 'shows',
             'follow', 'follows', 'suggest', 'suggests', 'indicate', 'indicates',
+            # Additional verbs that appear as sentence-starts, not concept-starts
+            'require', 'requires', 'enable', 'enables', 'allow', 'allows',
+            'help', 'helps', 'make', 'makes', 'take', 'takes', 'use', 'uses',
+            'seem', 'seems', 'appear', 'appears', 'become', 'becomes',
+            'remain', 'remains', 'mean', 'means', 'state', 'states',
+            'say', 'says', 'note', 'notes', 'highlight', 'highlights',
         }
 
         # ── Pronouns to reject entirely ───────────────────────────────────────
@@ -53,28 +59,16 @@ class ConceptExtractor:
             'a', 'an', 'the', 'of', 'in', 'on', 'at', 'to', 'for',
             'with', 'by', 'and', 'or', 'but', 'as', 'if', 'is', 'are',
             'was', 'were', 'be', 'been', 'being',
+            # Adverbs and pronouns that mark a phrase as a dangling fragment
+            'there', 'here', 'now', 'then', 'when', 'where', 'how', 'why',
+            'its', 'their', 'our', 'your', 'his', 'her', 'them', 'us',
+            'that', 'which', 'what',
         }
 
-        # ── Seed list of known management concepts (always included) ─────────
-        self.known_management_concepts = {
-            'strategic management', 'operational management', 'leadership',
-            'management', 'decision making', 'change management',
-            'risk management', 'project management', 'human resources',
-            'organizational behavior', 'business ethics', 'corporate governance',
-            'financial management', 'marketing strategy', 'supply chain',
-            'quality control', 'performance management', 'team building',
-            'conflict resolution', 'stakeholder management',
-            'innovation management', 'knowledge management',
-            'talent management', 'crisis management',
-            'bounded rationality', 'environmental uncertainty',
-            'organizational culture', 'management by objectives',
-            'technical skills', 'human skills', 'conceptual skills',
-            'planning', 'organizing', 'leading', 'controlling',
-            'intuitive decision making', 'evidence based management',
-            'programmed decision', 'nonprogrammed decision',
-            'strategic planning', 'operational planning',
-            'omnipotent view', 'symbolic view',
-        }
+        # ── Seed list of domain-specific concepts (always included if found in text) ─
+        # Empty by default — the extractor discovers concepts from the document itself.
+        # Populate this at runtime for specific domains if desired.
+        self.domain_concepts: set = set()
 
         # ── Regex: person-name patterns to reject ────────────────────────────
         # e.g. "Dr Zeinab Khayal", "Mohamed Zein", "Henri Fayol"
@@ -107,10 +101,15 @@ class ConceptExtractor:
             r'That is|i\.e\.|e\.g\.)\b[^.!?]*[.!?]',
             '', text, flags=re.IGNORECASE
         )
+        # Strip slide-attribution lines: 'Prepared by ...', 'Source:', '©', etc.
+        text = re.sub(
+            r'^(?:Prepared\s+by|Source\s*:|Copyright|\u00a9|Slide\s+\d+)[^\n]*',
+            '', text, flags=re.MULTILINE | re.IGNORECASE
+        )
         return text
 
     def extract_real_concepts(self, text: str) -> List[Dict]:
-        """Extract meaningful management concepts with their context."""
+        """Extract key concepts with their context from any domain."""
         concepts: Dict[str, Dict] = {}
         text = self.clean_text(text)
         sentences = sent_tokenize(text)
@@ -120,8 +119,8 @@ class ConceptExtractor:
             if len(sentence.split()) < 6:
                 continue
             for pattern in [
-                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\s+(?:is|are|was|were)\s+([^,.]{10,}?)(?:\.|,)',
-                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\s+(?:refers to|means|defined as)\s+([^,.]{10,}?)(?:\.|,)',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+(?:is|are|was|were)\s+([^,.]{10,}?)(?:\.|,)',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+(?:refers to|means|defined as)\s+([^,.]{10,}?)(?:\.|,)',
             ]:
                 for concept, definition in re.findall(pattern, sentence):
                     concept = concept.strip()
@@ -163,9 +162,10 @@ class ConceptExtractor:
                             'score': score,
                         }
 
-        # ── Pass 3: seed known management concepts found in text ──────────────
+        # ── Pass 3: seed any domain_concepts found in text ──────────────────────
+        # domain_concepts is empty by default; populate it externally for specific domains.
         text_lower = text.lower()
-        for known in self.known_management_concepts:
+        for known in self.domain_concepts:
             if known in text_lower:
                 context = next(
                     (s for s in sentences
@@ -194,18 +194,18 @@ class ConceptExtractor:
         sentences = sent_tokenize(text)
 
         patterns = [
-            (r'\b([A-Z][a-zA-Z\s]{3,30})\s+(?:is|are)\s+([^,.!?]{10,80})(?:\.|,|!|\?)', 'is'),
-            (r'\b([A-Z][a-zA-Z\s]{3,30})\s+(?:refers to|means)\s+([^,.!?]{10,80})(?:\.|,|!|\?)', 'refers'),
-            (r'\b([A-Z][a-zA-Z\s]{3,30})\s+(?:can be defined as|is defined as)\s+([^,.!?]{10,80})(?:\.|,)', 'defined'),
-            (r'\b([A-Z][a-zA-Z\s]{3,30})\s+involves\s+([^,.!?]{10,80})(?:\.|,)', 'involves'),
-            (r'\b([A-Z][a-zA-Z\s]{3,30})\s+consists of\s+([^,.!?]{10,80})(?:\.|,)', 'consists'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+(?:is|are)\s+([^,.!?]{10,80})(?:\.|,|!|\?)', 'is'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+(?:refers to|means)\s+([^,.!?]{10,80})(?:\.|,|!|\?)', 'refers'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+(?:can be defined as|is defined as)\s+([^,.!?]{10,80})(?:\.|,)', 'defined'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+involves\s+([^,.!?]{10,80})(?:\.|,)', 'involves'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+consists of\s+([^,.!?]{10,80})(?:\.|,)', 'consists'),
         ]
 
         seen = set()
         for sentence in sentences:
             clean = re.sub(r'\[.*?\]|\(.*?\)', '', sentence)
             for pattern, def_type in patterns:
-                for concept, definition in re.findall(pattern, clean, re.IGNORECASE):
+                for concept, definition in re.findall(pattern, clean):
                     concept = concept.strip()
                     definition = definition.strip().rstrip('.,;:')
                     if (
@@ -265,7 +265,7 @@ class ConceptExtractor:
     # ─────────────────────────────────────────────────────────────────────────
 
     def _is_valid_concept(self, term: str) -> bool:
-        """Return True only if *term* is a plausible management concept."""
+        """Return True only if *term* is a plausible domain concept."""
         if not term or not term.strip():
             return False
 
@@ -297,21 +297,38 @@ class ConceptExtractor:
 
         # ── Person-name pattern: reject names like "Mohamed Zein",
         #    "Dr Zeinab Khayal", "Henri Fayol" etc.
-        #    (allow single-word proper nouns that are in known_management_concepts)
-        if self._name_pattern.match(term) and term_lower not in self.known_management_concepts:
+        #    (allow terms that are in domain_concepts or contain concept-indicator words)
+        if self._name_pattern.match(term) and term_lower not in self.domain_concepts:
             # Heuristic: if every word is title-case and none appear in a
-            # management vocabulary, it's likely a name
-            mgmt_words = {
+            # domain vocabulary, it is likely a person name — reject it.
+            concept_indicator_words = {
+                # General academic / analytical
+                'theory', 'theorem', 'model', 'principle', 'law', 'effect',
+                'method', 'process', 'system', 'framework', 'paradigm',
+                'concept', 'approach', 'analysis', 'synthesis', 'hypothesis',
+                'function', 'structure', 'variable', 'perspective',
+                # Business / management
                 'management', 'decision', 'planning', 'organizing', 'leading',
                 'controlling', 'leadership', 'strategy', 'strategic', 'operational',
-                'culture', 'environment', 'skills', 'roles', 'functions',
-                'objectives', 'uncertainty', 'rationality', 'bounded', 'intuitive',
-                'programmed', 'structured', 'evidence', 'organizational',
+                'culture', 'skills', 'objectives', 'rationality', 'bounded',
+                'intuitive', 'programmed', 'evidence', 'organizational',
                 'behavior', 'ethics', 'governance', 'innovation', 'performance',
-                'stakeholder', 'omnipotent', 'symbolic', 'efficiency',
-                'effectiveness', 'conceptual', 'technical', 'human',
+                'stakeholder', 'efficiency', 'effectiveness', 'conceptual',
+                # Science / technology
+                'force', 'energy', 'matter', 'reaction', 'evolution', 'quantum',
+                'relativity', 'entropy', 'frequency', 'wavelength', 'algorithm',
+                'network', 'protocol', 'computing', 'machine', 'neural',
+                'potential', 'kinetic', 'atomic', 'molecular', 'chemical',
+                'biological', 'genetic', 'cellular', 'neural', 'cognitive',
+                # History / social sciences
+                'revolution', 'movement', 'doctrine', 'policy', 'ideology',
+                'democracy', 'colonial', 'industrial', 'economic', 'political',
+                'social', 'cultural', 'national', 'international', 'global',
+                # Mathematics
+                'equation', 'derivative', 'integral', 'matrix', 'vector',
+                'probability', 'statistics', 'regression', 'distribution',
             }
-            if not any(w.lower() in mgmt_words for w in words):
+            if not any(w.lower() in concept_indicator_words for w in words):
                 return False
 
         # ── Reject common document-structure patterns ─────────────────────────
