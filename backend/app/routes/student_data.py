@@ -12,9 +12,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.auth import get_current_user
-from app.repositories import material_repository
+from app.repositories import material_repository, user_repository
 from app.schema.counterfactual_schema import (
     CounterfactualChange,
     CounterfactualResponse,
@@ -25,10 +26,34 @@ from app.schema.prediction_history_schema import (
     PredictionTrendResponse,
 )
 from app.schema.timeline_schema import EvidenceTimelineResponse
-from app.services import prediction_history, quiz_gen, student_data
+from app.services import prediction_history, quiz_gen, student_data, study_buddy
 from app.services.timeline_service import build_timeline
 
 router = APIRouter(tags=["Student data"])
+
+
+class StudyBuddyOptIn(BaseModel):
+    optin: bool
+
+
+@router.get("/courses/{course_id}/study-buddies")
+def study_buddies(course_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    """Recommend up to 5 near-peer study partners in this course.
+
+    Only opted-in classmates are recommendable, and no grades are returned —
+    each suggestion is just a name plus a human-readable reason.
+    """
+    return study_buddy.recommend(str(user["_id"]), course_id, k=5)
+
+
+@router.put("/me/study-buddy-optin")
+def set_study_buddy_optin(
+    body: StudyBuddyOptIn,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Toggle whether this student is discoverable as a study buddy (consent)."""
+    user_repository.update(str(user["_id"]), {"study_buddy_optin": body.optin})
+    return {"studyBuddyOptIn": body.optin}
 
 
 @router.get("/courses")
