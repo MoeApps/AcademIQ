@@ -59,15 +59,20 @@ app.include_router(system_status.router)  # /api/system/status
 app.include_router(ml_result_router)      # /api/ml/result
 
 # ── Optional ML routes (student.py) ──────────────────────────────────────────
-# performance.py and todos.py have been deleted (dead code cleanup, see commit).
-# student.py is still guarded because it depends on tensorflow (grade/risk model)
-# which has no wheel for Python 3.13.
 try:
     from app.routes import student
     app.include_router(student.router)
     print("[OK] student ML route mounted.")
 except Exception as exc:
     print(f"[WARN] student ML route NOT mounted (missing deps): {exc}")
+
+# ── Quiz generator routes ─────────────────────────────────────────────────────
+try:
+    from app.routes.quiz_router import router as quiz_router
+    app.include_router(quiz_router)        # /api/quiz/*
+    print("[OK] quiz generator route mounted.")
+except Exception as exc:
+    print(f"[WARN] quiz generator route NOT mounted (missing deps): {exc}")
 
 
 if __name__ == "__main__":
