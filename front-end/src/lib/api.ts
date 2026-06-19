@@ -27,6 +27,7 @@ import type {
   CounterfactualResponse,
   PredictionHistoryPoint,
   PredictionTrendResponse,
+  StudyBuddiesResult,
 } from "./types";
 
 /**
@@ -135,6 +136,30 @@ export const api = {
     } catch {
       return null;
     }
+  },
+
+  /** Recommended near-peer study partners for a course (opt-in classmates). */
+  async getStudyBuddies(courseId: string): Promise<StudyBuddiesResult> {
+    if (USE_MOCK) {
+      return delay({
+        available: true,
+        buddies: [
+          { studentId: "m1", fullName: "Mohamed Alaa", email: "mohamed.alaa@university.edu", why: "similar study style, a bit ahead" },
+          { studentId: "m2", fullName: "Seif Sameh", email: "seif.sameh@university.edu", why: "similar study style" },
+          { studentId: "m3", fullName: "Aly Ehab", email: "aly.ehab@university.edu", why: "similar level & study style" },
+        ],
+      });
+    }
+    return request<StudyBuddiesResult>(`/courses/${courseId}/study-buddies`);
+  },
+
+  /** Toggle whether the current student is discoverable as a study buddy. */
+  async setStudyBuddyOptIn(optin: boolean): Promise<{ studyBuddyOptIn: boolean }> {
+    if (USE_MOCK) return delay({ studyBuddyOptIn: optin });
+    return request<{ studyBuddyOptIn: boolean }>("/me/study-buddy-optin", {
+      method: "PUT",
+      body: JSON.stringify({ optin }),
+    });
   },
 
   /* ---------------------------------------------------------------------- */

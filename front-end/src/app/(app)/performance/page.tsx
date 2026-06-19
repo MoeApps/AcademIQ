@@ -13,6 +13,7 @@ import { PredictedGradeCard } from "@/components/performance/PredictedGradeCard"
 import { PerformanceStatusCard } from "@/components/performance/PerformanceStatusCard";
 import { CourseAverageCard } from "@/components/performance/CourseAverageCard";
 import { CourseStatistics } from "@/components/performance/CourseStatistics";
+import { StudyBuddies } from "@/components/performance/StudyBuddies";
 import { PerformanceClassification } from "@/components/insights/PerformanceClassification";
 import { RiskFactors } from "@/components/insights/RiskFactors";
 import { CounterfactualCard } from "@/components/insights/CounterfactualCard";
@@ -244,6 +245,11 @@ function PerformanceContent() {
 
           <Section>
             <CourseStatistics stats={ready.statistics} />
+          </Section>
+
+          {/* ── Study Buddies ── */}
+          <Section>
+            <StudyBuddies courseId={ready.course.id} />
           </Section>
 
           {/* ── AI Insights Divider ── */}

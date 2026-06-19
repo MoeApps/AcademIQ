@@ -64,6 +64,7 @@ def _candidate(user_id: str, course_id: str) -> Optional[Dict[str, Any]]:
     return {
         "user_id": user_id,
         "name": user.get("full_name") or "Student",
+        "email": user.get("email", ""),
         "optin": bool(user.get("study_buddy_optin", False)),
         "vec": np.array([float(feats.get(c, 0) or 0) for c in _BEHAVIOUR]),
         "grade": grade,                      # may be None when no grades yet
@@ -129,7 +130,8 @@ def recommend(target_user_id: str, course_id: str, k: int = 5) -> Dict[str, Any]
     return {
         "available": True,
         "buddies": [
-            {"studentId": p["user_id"], "fullName": p["name"], "why": _why(target, p)}
+            {"studentId": p["user_id"], "fullName": p["name"],
+             "email": p["email"], "why": _why(target, p)}
             for p in picks
         ],
     }

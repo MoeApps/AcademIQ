@@ -30,8 +30,25 @@ export interface AuthUser {
   /** Moodle linkage identifiers (primary mapping keys; may be absent). */
   moodleUserId?: string | null;
   studentId?: string | null;
+  /** Whether this student is discoverable in classmates' study-buddy lists. */
+  studyBuddyOptIn?: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+/** A recommended study partner for a course (no grades exposed by design). */
+export interface StudyBuddy {
+  studentId: string;
+  fullName: string;
+  email: string;
+  why: string;
+}
+
+/** Response of the study-buddy recommender for a course. */
+export interface StudyBuddiesResult {
+  available: boolean;
+  buddies: StudyBuddy[];
+  reason?: string;
 }
 
 /** Result of a successful sign-in. */
