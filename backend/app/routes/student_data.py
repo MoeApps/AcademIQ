@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.auth import get_current_user
-from app.repositories import material_repository, user_repository
+from app.repositories import material_repository, metrics_repository, user_repository
 from app.schema.counterfactual_schema import (
     CounterfactualChange,
     CounterfactualResponse,
@@ -54,6 +54,43 @@ def set_study_buddy_optin(
     """Toggle whether this student is discoverable as a study buddy (consent)."""
     user_repository.update(str(user["_id"]), {"study_buddy_optin": body.optin})
     return {"studyBuddyOptIn": body.optin}
+
+
+@router.get("/me/debug-data")
+def debug_data(user: Dict[str, Any] = Depends(get_current_user)):
+    """Show which user is authenticated and what raw data the backend sees.
+
+    For development/testing only — helps verify that the right MongoDB
+    documents are linked to your logged-in account.
+    """
+    user_id = str(user["_id"])
+    feats = student_data._latest_features(user_id)
+    grades = student_data._grades(user_id)
+    courses = student_data.get_courses(user_id)
+    metrics_docs = metrics_repository.list_for_user(user_id)
+    per_course = {
+        m["course_id"]: m.get("metrics", {})
+        for m in metrics_docs
+        if m.get("course_id") != metrics_repository.OVERALL
+    }
+    return {
+        "user_id": user_id,
+        "email": user.get("email"),
+        "full_name": user.get("full_name"),
+        "courses_found": len(courses),
+        "courses": courses,
+        "feature_vector_keys": sorted(feats.keys()) if feats else [],
+        "feature_vector_sample": {
+            k: feats.get(k)
+            for k in [
+                "all_clicks", "active_days", "quiz_attempts",
+                "assignment_submissions", "total_time_spent",
+                "avg_quiz_score", "avg_assignment_score",
+            ]
+        } if feats else None,
+        "grades_count": len(grades),
+        "per_course_metrics": per_course,
+    }
 
 
 @router.get("/courses")
