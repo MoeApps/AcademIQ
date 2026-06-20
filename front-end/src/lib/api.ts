@@ -363,9 +363,9 @@ export const api = {
       return delay<StudyBuddyResponse>({
         available: true,
         buddies: [
-          { studentId: "s1", fullName: "Layla Ahmed", why: "Similar study style, a bit ahead" },
-          { studentId: "s2", fullName: "Omar Khalil", why: "Same pace, complementary strengths" },
-          { studentId: "s3", fullName: "Sara Mansour", why: "Similar quiz performance" },
+          { studentId: "s1", fullName: "Layla Ahmed", email: "layla.ahmed@university.edu", why: "Similar study style, a bit ahead" },
+          { studentId: "s2", fullName: "Omar Khalil", email: "omar.khalil@university.edu", why: "Same pace, complementary strengths" },
+          { studentId: "s3", fullName: "Sara Mansour", email: "sara.mansour@university.edu", why: "Similar quiz performance" },
         ],
       });
     }

@@ -207,6 +207,7 @@ export interface GeneratedQuiz {
 export interface StudyBuddy {
   studentId: string;
   fullName: string;
+  email: string;
   why: string;
 }
 

@@ -135,6 +135,15 @@ def _predict_grade(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _burnout(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Burnout level from the trained model, or None if offline (heuristic used)."""
+    try:
+        from app.services import burnout_service
+        return burnout_service.predict(features)
+    except Exception:
+        return None
+
+
 def _store_prediction(user_id: str, result: Dict[str, Any]) -> None:
     """Persist the latest model output to ml_results (one per user+model)."""
     try:
@@ -377,16 +386,20 @@ def get_dashboard(user: Dict[str, Any]) -> Dict[str, Any]:
         {"label": "Last week",   "hours": round(weekly * 1.2, 1)},
     ]
 
-    # ── Burnout heuristic ──────────────────────────────────────────────────
-    active_days = int(feats.get("active_days", 0) or 0)
-    if total_hours > 20 and active_days < 8:
-        level, msg = "High Risk",   "High study time concentrated into few active days — pace yourself."
-    elif total_hours > 10 and active_days < 10:
-        level, msg = "Medium Risk", "Workload is climbing relative to your active days. Watch your rest."
-    elif total_hours > 0:
-        level, msg = "Low Risk",    "Your workload looks manageable. Maintain a steady pace."
+    # ── Burnout: real model if available, else heuristic ───────────────────
+    burnout = _burnout(feats)
+    if burnout:
+        level, msg = burnout["level"], burnout["message"]
     else:
-        level, msg = "Safe",        "No signs of overload from the current data."
+        active_days = int(feats.get("active_days", 0) or 0)
+        if total_hours > 20 and active_days < 8:
+            level, msg = "High Risk",   "High study time concentrated into few active days — pace yourself."
+        elif total_hours > 10 and active_days < 10:
+            level, msg = "Medium Risk", "Workload is climbing relative to your active days. Watch your rest."
+        elif total_hours > 0:
+            level, msg = "Low Risk",    "Your workload looks manageable. Maintain a steady pace."
+        else:
+            level, msg = "Safe",        "No signs of overload from the current data."
 
     return {
         "student": {

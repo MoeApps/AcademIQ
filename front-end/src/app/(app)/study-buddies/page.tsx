@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import { Users, UserCheck, Info } from "lucide-react";
+import { Users, UserCheck, Info, Mail } from "lucide-react";
 import { motion, useReducedMotion, useInView } from "framer-motion";
 
 import { api } from "@/lib/api";
@@ -269,6 +269,7 @@ function StudyBuddiesContent() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-foreground">{buddy.fullName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{buddy.email}</p>
                     <Badge
                       className="mt-1"
                       style={{
@@ -280,6 +281,14 @@ function StudyBuddiesContent() {
                       {buddy.why}
                     </Badge>
                   </div>
+                  <a
+                    href={`mailto:${buddy.email}`}
+                    title={`Email ${buddy.fullName}`}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-(--brand-steel)/40 hover:text-(--brand-steel)"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    Contact
+                  </a>
                 </CardContent>
               </Card>
             ))}
