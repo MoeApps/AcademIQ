@@ -73,6 +73,35 @@ def debug_data(user: Dict[str, Any] = Depends(get_current_user)):
         for m in metrics_docs
         if m.get("course_id") != metrics_repository.OVERALL
     }
+    # Run the live model and report exactly what happens
+    model_status: Dict[str, Any] = {"loaded": False, "prediction": None, "error": None}
+    try:
+        from app.services.performance_predict import (
+            _calibrated_model,
+            _behavioral_features,
+            predict_performance,
+        )
+        model_status["loaded"] = _calibrated_model is not None
+        model_status["expected_features"] = _behavioral_features
+        if feats and _calibrated_model is not None:
+            perf_keys = [
+                "all_clicks", "active_days", "access_frequency", "material_clicks",
+                "quiz_attempts", "assignment_submissions", "total_time_spent",
+                "procrastination_index", "late_submission_count",
+            ]
+            raw_input = {k: feats.get(k, 0) for k in perf_keys}
+            model_status["raw_input_to_model"] = raw_input
+            result = predict_performance(raw_input)
+            model_status["prediction"] = {
+                "probability": result.get("probability"),
+                "classification": result.get("classification"),
+                "tier": result.get("tier"),
+            }
+    except ImportError as exc:
+        model_status["error"] = f"Missing dependency: {exc}"
+    except Exception as exc:
+        model_status["error"] = str(exc)
+
     return {
         "user_id": user_id,
         "email": user.get("email"),
@@ -90,6 +119,7 @@ def debug_data(user: Dict[str, Any] = Depends(get_current_user)):
         } if feats else None,
         "grades_count": len(grades),
         "per_course_metrics": per_course,
+        "model_status": model_status,
     }
 
 
