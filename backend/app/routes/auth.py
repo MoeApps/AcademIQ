@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.auth import get_current_user
 from app.config.settings import (
     APP_LOGIN_URL,
+    MOODLE_BASE_URL,
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
@@ -32,6 +33,7 @@ from app.services.security import (
     hash_token,
     verify_password,
 )
+from app.services.user_provisioning import resolve_or_create_user
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -201,6 +203,112 @@ async def request_magic_link(payload: MagicLinkRequest):
     create_magic_token(token_hash, str(user["_id"]))
 
     return {"token": raw_token}
+
+
+@router.get("/moodle/default-url")
+async def moodle_default_url():
+    """Return the configured default Moodle URL (if any) so the frontend can pre-fill it."""
+    return {"moodle_url": MOODLE_BASE_URL or None}
+
+
+class MoodleLoginRequest(BaseModel):
+    moodle_url: str
+    username: str
+    password: str
+
+
+@router.post("/moodle")
+async def moodle_login(payload: MoodleLoginRequest, response: Response):
+    """
+    Authenticate via Moodle's Web Services API, then find or create the
+    matching AcademIQ account and issue a session.
+
+    Flow:
+      1. POST /login/token.php → obtain a wstoken
+      2. Call core_webservice_get_site_info → get userid, fullname, email
+      3. resolve_or_create_user (same logic as extension sync)
+      4. Issue session cookie + return profile
+    """
+    import httpx
+
+    moodle_url = payload.moodle_url.rstrip("/")
+    if not moodle_url:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Moodle URL is required.")
+
+    # Step 1: get a web-service token from Moodle
+    token_url = f"{moodle_url}/login/token.php"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            token_resp = await client.post(token_url, data={
+                "username": payload.username,
+                "password": payload.password,
+                "service": "moodle_mobile_app",
+            })
+    except httpx.RequestError:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Could not reach the Moodle server. Please check the URL and try again.",
+        )
+
+    token_data = token_resp.json()
+    if "error" in token_data or "token" not in token_data:
+        detail = token_data.get("error", "Invalid Moodle credentials.")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail)
+
+    ws_token = token_data["token"]
+
+    # Step 2: fetch user identity from Moodle
+    site_info_url = (
+        f"{moodle_url}/webservice/rest/server.php"
+        f"?wstoken={ws_token}"
+        f"&wsfunction=core_webservice_get_site_info"
+        f"&moodlewsrestformat=json"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            info_resp = await client.get(site_info_url)
+    except httpx.RequestError:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Authenticated with Moodle but could not fetch user info.",
+        )
+
+    info = info_resp.json()
+    if "exception" in info:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            info.get("message", "Moodle API error."),
+        )
+
+    moodle_user_id = str(info.get("userid", ""))
+    email = (info.get("email") or info.get("username") or "").strip().lower() or None
+    full_name = info.get("fullname") or info.get("username") or ""
+
+    if not moodle_user_id:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Moodle did not return a user ID.",
+        )
+
+    # Step 3: find or create the AcademIQ account
+    identity = {
+        "moodle_user_id": moodle_user_id,
+        "student_id": None,
+        "full_name": full_name,
+        "email": email,
+    }
+    user, was_created = resolve_or_create_user(identity)
+
+    # Step 4: issue a session
+    session_token = _issue_session(response, user)
+    profile = serialize_user(user)
+    return {
+        "user": profile,
+        "role": profile["role"],
+        "token": session_token,
+        "token_type": "bearer",
+        "account_created": was_created,
+    }
 
 
 @router.get("/magic-login")

@@ -12,9 +12,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.auth import get_current_user
-from app.repositories import material_repository
+from app.repositories import material_repository, metrics_repository, user_repository
 from app.schema.counterfactual_schema import (
     CounterfactualChange,
     CounterfactualResponse,
@@ -25,10 +26,101 @@ from app.schema.prediction_history_schema import (
     PredictionTrendResponse,
 )
 from app.schema.timeline_schema import EvidenceTimelineResponse
-from app.services import prediction_history, quiz_gen, student_data
+from app.services import prediction_history, quiz_gen, student_data, study_buddy
 from app.services.timeline_service import build_timeline
 
 router = APIRouter(tags=["Student data"])
+
+
+class StudyBuddyOptIn(BaseModel):
+    optin: bool
+
+
+@router.get("/courses/{course_id}/study-buddies")
+def study_buddies(course_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    """Recommend up to 5 near-peer study partners in this course.
+
+    Only opted-in classmates are recommendable, and no grades are returned —
+    each suggestion is just a name plus a human-readable reason.
+    """
+    return study_buddy.recommend(str(user["_id"]), course_id, k=5)
+
+
+@router.put("/me/study-buddy-optin")
+def set_study_buddy_optin(
+    body: StudyBuddyOptIn,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Toggle whether this student is discoverable as a study buddy (consent)."""
+    user_repository.update(str(user["_id"]), {"study_buddy_optin": body.optin})
+    return {"studyBuddyOptIn": body.optin}
+
+
+@router.get("/me/debug-data")
+def debug_data(user: Dict[str, Any] = Depends(get_current_user)):
+    """Show which user is authenticated and what raw data the backend sees.
+
+    For development/testing only — helps verify that the right MongoDB
+    documents are linked to your logged-in account.
+    """
+    user_id = str(user["_id"])
+    feats = student_data._latest_features(user_id)
+    grades = student_data._grades(user_id)
+    courses = student_data.get_courses(user_id)
+    metrics_docs = metrics_repository.list_for_user(user_id)
+    per_course = {
+        m["course_id"]: m.get("metrics", {})
+        for m in metrics_docs
+        if m.get("course_id") != metrics_repository.OVERALL
+    }
+    # Run the live model and report exactly what happens
+    model_status: Dict[str, Any] = {"loaded": False, "prediction": None, "error": None}
+    try:
+        from app.services.performance_predict import (
+            _calibrated_model,
+            _behavioral_features,
+            predict_performance,
+        )
+        model_status["loaded"] = _calibrated_model is not None
+        model_status["expected_features"] = _behavioral_features
+        if feats and _calibrated_model is not None:
+            perf_keys = [
+                "all_clicks", "active_days", "access_frequency", "material_clicks",
+                "quiz_attempts", "assignment_submissions", "total_time_spent",
+                "procrastination_index", "late_submission_count",
+            ]
+            raw_input = {k: feats.get(k, 0) for k in perf_keys}
+            model_status["raw_input_to_model"] = raw_input
+            result = predict_performance(raw_input)
+            model_status["prediction"] = {
+                "probability": result.get("probability"),
+                "classification": result.get("classification"),
+                "tier": result.get("tier"),
+            }
+    except ImportError as exc:
+        model_status["error"] = f"Missing dependency: {exc}"
+    except Exception as exc:
+        model_status["error"] = str(exc)
+
+    return {
+        "user_id": user_id,
+        "email": user.get("email"),
+        "full_name": user.get("full_name"),
+        "courses_found": len(courses),
+        "courses": courses,
+        "feature_vector_keys": sorted(feats.keys()) if feats else [],
+        "feature_vector_sample": {
+            k: feats.get(k)
+            for k in [
+                "all_clicks", "active_days", "quiz_attempts",
+                "assignment_submissions", "total_time_spent",
+                "avg_quiz_score", "avg_assignment_score",
+            ]
+        } if feats else None,
+        "grades_count": len(grades),
+        "per_course_metrics": per_course,
+        "model_status": model_status,
+    }
 
 
 @router.get("/courses")

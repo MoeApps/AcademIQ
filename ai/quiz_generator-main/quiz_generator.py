@@ -58,21 +58,21 @@ class QuizGenerator:
         # 1. Definition questions (30%) - only if we have good definitions
         num_def = max(1, int(num_questions * 0.3))
         for definition in document.definitions[:num_def]:
-            question = self.question_gen.generate_definition_question(definition)
+            question = self.question_gen.generate_definition_question(definition, document.concepts)
             if question:
                 questions.append(question)
         
         # 2. Application questions (30%) - use concepts with context
         num_app = max(1, int(num_questions * 0.3))
         for concept_data in document.concepts[:num_app]:
-            question = self.question_gen.generate_application_question(concept_data)
+            question = self.question_gen.generate_application_question(concept_data, document.concepts)
             if question:
                 questions.append(question)
         
         # 3. Characteristics questions (20%)
         num_char = max(1, int(num_questions * 0.2))
         for concept_data in document.concepts[num_app:num_app + num_char]:
-            question = self.question_gen.generate_characteristics_question(concept_data)
+            question = self.question_gen.generate_characteristics_question(concept_data, document.concepts)
             if question:
                 questions.append(question)
         
@@ -102,7 +102,7 @@ class QuizGenerator:
         if len(questions) < num_questions:
             needed = num_questions - len(questions)
             for concept_data in document.concepts[len(questions):len(questions) + needed]:
-                question = self.question_gen.generate_application_question(concept_data)
+                question = self.question_gen.generate_application_question(concept_data, document.concepts)
                 if question:
                     questions.append(question)
         

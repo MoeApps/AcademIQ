@@ -68,6 +68,11 @@ SMTP_USE_TLS: bool = _get_bool("SMTP_USE_TLS", True)
 # development and the grading environment never block on a mail server.
 EMAIL_ENABLED: bool = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 
+# --- Moodle ---------------------------------------------------------------
+# Default Moodle instance URL. The frontend login form pre-fills this so
+# students don't have to type it, but they can override it.
+MOODLE_BASE_URL: str = _get("MOODLE_BASE_URL", "")
+
 # --- Initial admin (used by scripts/seed_admin.py) ------------------------
 ADMIN_EMAIL: str = _get("ADMIN_EMAIL", "admin@academiq.local")
 ADMIN_PASSWORD: str = _get("ADMIN_PASSWORD", "Admin@12345")

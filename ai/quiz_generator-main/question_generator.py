@@ -1,77 +1,76 @@
 # question_generator.py
+import re
 import random
 from typing import List, Dict, Optional
 from nltk.tokenize import sent_tokenize, word_tokenize
 from data_structures import QuizQuestion
 
+
 class IntelligentQuestionGenerator:
-    """Generate meaningful, test-like questions"""
-    
+    """
+    Generate meaningful, test-like questions derived from document content.
+
+    Key improvement over the previous version:
+    - Correct answers are extracted from the concept's actual document context
+      sentence, not from hardcoded keyword-matched phrases.
+    - Distractors are extracted from OTHER concepts' document context sentences,
+      so they are in the same topic space (plausible) but describe a different
+      concept (incorrect). This makes distractors much harder to dismiss at a glance.
+    """
+
     def __init__(self):
         self.question_templates = {
             'definition': [
                 "What is the definition of '{concept}'?",
-                "How is '{concept}' defined in management literature?",
+                "How is '{concept}' defined in the source material?",
                 "Which of the following best describes '{concept}'?",
-                "What does the term '{concept}' refer to in organizational contexts?"
+                "What does the term '{concept}' refer to?"
             ],
             'application': [
-                "In which business scenario would '{concept}' be most applicable?",
+                "In which real-world scenario would '{concept}' be most applicable?",
                 "What is a real-world example of '{concept}' in practice?",
-                "When should managers apply the principles of '{concept}'?",
-                "Which situation best demonstrates the use of '{concept}' in organizations?"
+                "When would applying the principles of '{concept}' be most beneficial?",
+                "Which situation best demonstrates the use of '{concept}' in practice?"
             ],
             'characteristics': [
                 "What is a key characteristic of '{concept}'?",
-                "Which feature distinguishes '{concept}' from similar management concepts?",
+                "Which feature distinguishes '{concept}' from similar concepts?",
                 "What are the main attributes or components of '{concept}'?",
                 "Which statement accurately describes a property of '{concept}'?"
             ],
             'comparison': [
                 "What is the main difference between '{concept1}' and '{concept2}'?",
-                "How does '{concept1}' differ from '{concept2}' in organizational settings?",
+                "How does '{concept1}' differ from '{concept2}'?",
                 "Which statement correctly contrasts '{concept1}' and '{concept2}'?",
                 "What distinguishes the approach of '{concept1}' from '{concept2}'?"
             ],
             'relationship': [
-                "How are '{concept1}' and '{concept2}' typically related in business contexts?",
-                "What is the relationship between '{concept1}' and '{concept2}' in management theory?",
+                "How are '{concept1}' and '{concept2}' typically related?",
+                "What is the relationship between '{concept1}' and '{concept2}'?",
                 "Which statement best describes how '{concept1}' and '{concept2}' interact?",
-                "How do '{concept1}' and '{concept2}' work together in organizational success?"
+                "How do '{concept1}' and '{concept2}' interact or complement each other?"
             ]
         }
-        
-        # Common business scenarios for application questions
-        self.business_scenarios = [
-            "A company undergoing digital transformation and needing to manage change effectively",
-            "An organization facing ethical dilemmas in international operations",
-            "A team experiencing communication breakdowns during a critical project",
-            "A manager dealing with conflicting priorities and limited resources",
-            "A department implementing new technology while maintaining productivity",
-            "An executive team developing a long-term strategy in a volatile market",
-            "A company restructuring to improve operational efficiency",
-            "An organization managing diverse teams across different cultures"
-        ]
-    
-    def generate_definition_question(self, concept_data: Dict) -> Optional[QuizQuestion]:
-        """Generate a definition question"""
-        concept = concept_data.get('concept', '')
-        definition = concept_data.get('definition', '')
-        
+
+    # ── Public generators ─────────────────────────────────────────────────────
+
+    def generate_definition_question(
+        self, concept_data: Dict, all_concepts: List[Dict] = None
+    ) -> Optional[QuizQuestion]:
+        """Generate a definition question with document-derived distractors."""
+        concept    = concept_data.get('concept', '').strip()
+        definition = concept_data.get('definition', '').strip()
         if not concept or not definition:
             return None
-        
-        # Generate question
-        question_template = random.choice(self.question_templates['definition'])
-        question = question_template.format(concept=concept)
-        
-        # Generate distractors (wrong definitions)
-        distractors = self._generate_definition_distractors(concept, definition)
-        
-        # Format options nicely
-        options = distractors + [definition]
+
+        question    = random.choice(self.question_templates['definition']).format(concept=concept)
+        distractors = self._definition_distractors(concept, definition, all_concepts or [])
+        if len(distractors) < 2:
+            return None
+
+        options = distractors[:3] + [definition]
         random.shuffle(options)
-        
+
         return QuizQuestion(
             question=question,
             options=options,
@@ -79,268 +78,359 @@ class IntelligentQuestionGenerator:
             question_type="multiple_choice",
             context=concept_data.get('context', ''),
             difficulty=0.5,
-            keywords=self._extract_keywords_from_concept(concept)
+            keywords=self._keywords(concept)
         )
-    
-    def _generate_definition_distractors(self, concept: str, correct_def: str) -> List[str]:
-        """Generate plausible wrong definitions"""
-        distractors = []
-        
-        # Get the main word from concept
-        main_word = concept.split()[0].lower() if concept.split() else concept.lower()
-        
-        # Pattern-based distractors
-        patterns = [
-            f"A tool for measuring {main_word} effectiveness in organizations",
-            f"The historical development and origin of {main_word} theory",
-            f"A specific methodology used exclusively in {main_word} research",
-            f"The complete opposite approach to traditional {main_word} practices",
-            f"A narrow subset of {main_word} focused only on quantitative aspects",
-            f"Primarily concerned with the financial aspects of {main_word} implementation",
-            f"An outdated theory that has been replaced by modern {main_word} approaches",
-            f"Exclusively focused on the technological components of {main_word}"
-        ]
-        
-        # Select 3 unique distractors
-        selected_patterns = random.sample(patterns, 3)
-        return selected_patterns
-    
-    def generate_application_question(self, concept_data: Dict) -> Optional[QuizQuestion]:
-        """Generate an application question"""
-        concept = concept_data.get('concept', '')
-        
-        if not concept:
+
+    def generate_application_question(
+        self, concept_data: Dict, all_concepts: List[Dict] = None
+    ) -> Optional[QuizQuestion]:
+        """
+        Generate an application question.
+        Correct answer: extracted from the concept's own document sentence.
+        Distractors: extracted from other concepts' document sentences.
+        """
+        concept = concept_data.get('concept', '').strip()
+        context = concept_data.get('context', '').strip()
+        if not concept or not context:
             return None
-        
-        # Generate question
-        question_template = random.choice(self.question_templates['application'])
-        question = question_template.format(concept=concept)
-        
-        # Generate correct scenario based on concept type
-        concept_lower = concept.lower()
-        if any(word in concept_lower for word in ['strateg', 'plan', 'vision', 'goal']):
-            correct_scenario = "Developing long-term organizational direction and competitive positioning"
-        elif any(word in concept_lower for word in ['operat', 'process', 'efficien', 'productiv']):
-            correct_scenario = "Improving daily workflow, resource utilization, and quality control"
-        elif any(word in concept_lower for word in ['leader', 'motivat', 'inspire', 'visionary']):
-            correct_scenario = "Guiding and influencing team members toward achieving organizational objectives"
-        elif any(word in concept_lower for word in ['market', 'custom', 'brand', 'sales']):
-            correct_scenario = "Understanding customer needs, positioning products, and creating value"
-        elif any(word in concept_lower for word in ['finance', 'budget', 'invest', 'capital']):
-            correct_scenario = "Managing financial resources, analyzing investments, and ensuring profitability"
-        elif any(word in concept_lower for word in ['risk', 'uncertain', 'threat', 'crisis']):
-            correct_scenario = "Identifying potential problems, assessing impacts, and developing mitigation strategies"
-        elif any(word in concept_lower for word in ['change', 'transform', 'adapt', 'evolve']):
-            correct_scenario = "Managing organizational transitions and adapting to new market conditions"
-        elif any(word in concept_lower for word in ['team', 'group', 'collaborat', 'cooperat']):
-            correct_scenario = "Building effective working relationships and collaborative environments"
-        else:
-            correct_scenario = "Addressing organizational challenges and improving business performance"
-        
-        # Generate distractors (non-business scenarios)
-        distractors = [
-            "Personal life decision-making and individual lifestyle choices",
-            "Technical computer programming and software development tasks",
-            "Medical diagnosis, treatment planning, and healthcare delivery",
-            "Legal court proceedings, litigation, and judicial decision-making",
-            "Artistic creative processes and aesthetic expression",
-            "Scientific laboratory research and experimental design",
-            "Sports coaching, athletic training, and performance optimization",
-            "Culinary arts, cooking techniques, and food preparation"
-        ]
-        
-        # Select 3 distractors, ensuring they're different from correct answer
-        selected_distractors = random.sample(distractors, 3)
-        
-        # Combine and shuffle
-        options = selected_distractors + [correct_scenario]
+
+        question = random.choice(self.question_templates['application']).format(concept=concept)
+
+        correct = self._best_sentence(context)
+        if not correct:
+            return None
+
+        distractors = self._cross_concept_distractors(correct, all_concepts or [], exclude=concept)
+        if len(distractors) < 2:
+            return None
+
+        options = distractors[:3] + [correct]
         random.shuffle(options)
-        
+
         return QuizQuestion(
             question=question,
             options=options,
-            correct_answer=correct_scenario,
+            correct_answer=correct,
             question_type="multiple_choice",
-            context=concept_data.get('context', ''),
+            context=context,
             difficulty=0.6,
-            keywords=self._extract_keywords_from_concept(concept)
+            keywords=self._keywords(concept)
         )
-    
-    def generate_characteristics_question(self, concept_data: Dict) -> Optional[QuizQuestion]:
-        """Generate a characteristics question"""
-        concept = concept_data.get('concept', '')
-        
-        if not concept:
+
+    def generate_characteristics_question(
+        self, concept_data: Dict, all_concepts: List[Dict] = None
+    ) -> Optional[QuizQuestion]:
+        """
+        Generate a characteristics question.
+        Correct answer: best sentence from the concept's document context.
+        Distractors: sentences from other concepts' document contexts.
+        """
+        concept = concept_data.get('concept', '').strip()
+        context = concept_data.get('context', '').strip()
+        if not concept or not context:
             return None
-        
-        # Generate question
-        question_template = random.choice(self.question_templates['characteristics'])
-        question = question_template.format(concept=concept)
-        
-        # Determine correct characteristic based on concept
-        concept_lower = concept.lower()
-        correct_char = ""
-        
-        if any(word in concept_lower for word in ['strateg', 'plan', 'vision']):
-            correct_char = "Focuses on long-term organizational direction and competitive positioning"
-        elif any(word in concept_lower for word in ['operat', 'process', 'efficien']):
-            correct_char = "Emphasizes efficiency, quality control, and optimal resource utilization"
-        elif any(word in concept_lower for word in ['leader', 'inspire', 'visionary']):
-            correct_char = "Involves inspiring, influencing, and guiding others toward shared goals"
-        elif any(word in concept_lower for word in ['manage', 'administer', 'coordinate']):
-            correct_char = "Includes planning, organizing, leading, and controlling organizational resources"
-        elif any(word in concept_lower for word in ['market', 'custom', 'brand']):
-            correct_char = "Centers on understanding customer needs and creating value propositions"
-        elif any(word in concept_lower for word in ['finance', 'budget', 'invest']):
-            correct_char = "Deals with acquisition, allocation, and management of financial resources"
-        elif any(word in concept_lower for word in ['risk', 'uncertain', 'threat']):
-            correct_char = "Involves identifying, assessing, and mitigating potential negative outcomes"
-        elif any(word in concept_lower for word in ['change', 'transform', 'adapt']):
-            correct_char = "Focuses on managing transitions and adapting to new environments"
-        elif any(word in concept_lower for word in ['team', 'group', 'collaborat']):
-            correct_char = "Emphasizes interpersonal relationships, communication, and cooperation"
-        else:
-            correct_char = "Contributes to organizational effectiveness and goal achievement"
-        
-        # Generate distractors (wrong characteristics)
-        distractors = [
-            "Primarily involves technical skills without consideration of human factors",
-            "Can be completely automated without requiring human judgment or discretion",
-            "Has no ethical considerations, implications, or moral dimensions",
-            "Exists and functions identically across all industries, cultures, and contexts",
-            "Requires no specialized knowledge, training, or experience to implement effectively",
-            "Focuses exclusively on quantitative metrics without qualitative assessment",
-            "Has no connection to organizational strategy, goals, or performance outcomes",
-            "Operates independently of market conditions, competition, or external factors"
-        ]
-        
-        # Select 3 distractors
-        selected_distractors = random.sample(distractors, 3)
-        
-        # Combine and shuffle
-        options = selected_distractors + [correct_char]
+
+        question = random.choice(self.question_templates['characteristics']).format(concept=concept)
+
+        correct = self._best_sentence(context)
+        if not correct:
+            return None
+
+        distractors = self._cross_concept_distractors(correct, all_concepts or [], exclude=concept)
+        if len(distractors) < 2:
+            return None
+
+        options = distractors[:3] + [correct]
         random.shuffle(options)
-        
+
         return QuizQuestion(
             question=question,
             options=options,
-            correct_answer=correct_char,
+            correct_answer=correct,
             question_type="multiple_choice",
-            context=concept_data.get('context', ''),
+            context=context,
             difficulty=0.55,
-            keywords=self._extract_keywords_from_concept(concept)
+            keywords=self._keywords(concept)
         )
-    
+
     def generate_comparison_question(self, relationship_data: Dict) -> Optional[QuizQuestion]:
-        """Generate a comparison question"""
-        concept1 = relationship_data.get('concept1', '')
-        concept2 = relationship_data.get('concept2', '')
-        
+        """Generate a comparison question between two related concepts."""
+        concept1 = relationship_data.get('concept1', '').strip()
+        concept2 = relationship_data.get('concept2', '').strip()
+        context  = relationship_data.get('context', '').strip()
         if not concept1 or not concept2:
             return None
-        
-        # Generate question
-        question_template = random.choice(self.question_templates['comparison'])
-        question = question_template.format(concept1=concept1, concept2=concept2)
-        
-        # Generate correct comparison based on concepts
-        concept1_lower = concept1.lower()
-        concept2_lower = concept2.lower()
-        
-        # Determine correct comparison
-        if ('strateg' in concept1_lower and 'operat' in concept2_lower) or \
-           ('strateg' in concept2_lower and 'operat' in concept1_lower):
-            correct_answer = "Strategic management focuses on long-term direction while operational management deals with daily activities"
-        elif ('leader' in concept1_lower and 'manage' in concept2_lower) or \
-             ('leader' in concept2_lower and 'manage' in concept1_lower):
-            correct_answer = "Leadership focuses on inspiring change and innovation while management focuses on maintaining stability and efficiency"
-        elif ('effect' in concept1_lower and 'efficien' in concept2_lower) or \
-             ('effect' in concept2_lower and 'efficien' in concept1_lower):
-            correct_answer = "Effectiveness is about achieving goals and desired outcomes while efficiency is about minimizing waste and optimizing resources"
-        elif ('quantitat' in concept1_lower or 'qualitat' in concept2_lower) or \
-             ('quantitat' in concept2_lower or 'qualitat' in concept1_lower):
-            correct_answer = "Quantitative analysis focuses on numerical data and metrics while qualitative analysis focuses on descriptive information and context"
-        else:
-            correct_answer = f"{concept1} typically deals with broader organizational aspects while {concept2} focuses on more specific implementation details"
-        
-        # Generate distractors
+
+        question = random.choice(self.question_templates['comparison']).format(
+            concept1=concept1, concept2=concept2
+        )
+        correct = self._comparison_answer(concept1, concept2, context)
+
         distractors = [
             f"{concept1} and {concept2} are exactly the same concept with different names",
             f"{concept1} always directly causes or leads to {concept2} in all situations",
-            f"{concept2} completely replaces and makes {concept1} obsolete in modern organizations",
+            f"{concept2} completely replaces and makes {concept1} entirely obsolete",
             f"{concept1} and {concept2} have absolutely no relationship or connection to each other",
-            f"{concept1} is purely theoretical while {concept2} is exclusively practical",
-            f"{concept2} is always more important and valuable than {concept1} for organizations",
-            f"{concept1} applies only to large corporations while {concept2} applies only to small businesses"
         ]
-        
-        # Select 3 distractors
-        selected_distractors = random.sample(distractors, 3)
-        
-        # Combine and shuffle
-        options = selected_distractors + [correct_answer]
+        options = random.sample(distractors, 3) + [correct]
         random.shuffle(options)
-        
+
         return QuizQuestion(
             question=question,
             options=options,
-            correct_answer=correct_answer,
+            correct_answer=correct,
             question_type="multiple_choice",
-            context=relationship_data.get('context', ''),
+            context=context,
             difficulty=0.7,
-            keywords=self._extract_keywords_from_concept(concept1) + self._extract_keywords_from_concept(concept2)
+            keywords=self._keywords(concept1) + self._keywords(concept2)
         )
-    
-    def generate_short_answer_question(self, paragraph: str, concept: str = "") -> Optional[QuizQuestion]:
-        """Generate a short answer question"""
+
+    def generate_short_answer_question(
+        self, paragraph: str, concept: str = ""
+    ) -> Optional[QuizQuestion]:
+        """Generate a short answer question from a paragraph."""
         sentences = sent_tokenize(paragraph)
         if len(sentences) < 2:
             return None
-        
-        # Find the most substantive sentence
+
         main_sentence = max(sentences, key=lambda s: len(s.split()))
-        
-        # Create an analytical question
+
         if concept:
-            question_types = [
-                f"Explain how '{concept}' contributes to organizational success in the context described.",
-                f"Describe a specific situation where understanding '{concept}' would help resolve the challenges mentioned.",
-                f"What practical steps could a manager take to apply '{concept}' based on this information?",
-                f"How does the concept of '{concept}' relate to the organizational issue described above?"
+            templates = [
+                f"Explain the significance of '{concept}' in the context described above.",
+                f"Describe a specific situation where understanding '{concept}' would be most valuable.",
+                f"What are the key implications of '{concept}' based on the information provided?",
+                f"How does '{concept}' relate to the main ideas presented in this passage?"
             ]
-            question = random.choice(question_types)
         else:
-            question_types = [
-                "Explain the organizational implications of the concept described above.",
-                "How would you apply this management principle in a real business situation?",
-                "What challenges might organizations face when implementing this approach?",
-                "Why is this concept important for modern managers to understand?"
+            templates = [
+                "Explain the broader significance of the concept described above.",
+                "How would you apply this principle in a real-world situation?",
+                "What challenges might arise when implementing this approach?",
+                "Why is this concept important to understand in this field?"
             ]
-            question = random.choice(question_types)
-        
-        # Provide context
-        context = f"Context: {main_sentence[:150]}..." if len(main_sentence) > 150 else main_sentence
-        
+
+        question = random.choice(templates)
+        ctx = f"Context: {main_sentence[:150]}..." if len(main_sentence) > 150 else main_sentence
+
         return QuizQuestion(
             question=question,
             options=[],
             correct_answer=main_sentence,
             question_type="short_answer",
-            context=context,
+            context=ctx,
             difficulty=0.65,
-            keywords=self._extract_keywords(main_sentence)
+            keywords=self._keywords(main_sentence[:80])
         )
-    
-    def _extract_keywords_from_concept(self, concept: str) -> List[str]:
-        """Extract keywords from concept"""
-        words = [w.lower() for w in word_tokenize(concept) if w.isalnum() and len(w) > 2]
-        stop_words = {'the', 'and', 'for', 'with', 'that', 'this', 'from'}
-        keywords = [w for w in words if w not in stop_words]
-        return list(set(keywords))[:3]
-    
-    def _extract_keywords(self, text: str) -> List[str]:
-        """Extract keywords from text"""
-        words = [w.lower() for w in word_tokenize(text) if w.isalnum() and len(w) > 3]
-        stop_words = {'that', 'with', 'this', 'from', 'have', 'which', 'their', 'about', 'would', 'could'}
-        keywords = [w for w in words if w not in stop_words]
-        return list(set(keywords))[:3]
+
+    # ── Core extraction helpers ───────────────────────────────────────────────
+
+    def _best_sentence(self, context: str, max_words: int = 25) -> str:
+        """
+        Pick the most informative sentence from a context string and return
+        it cleaned up to at most max_words words.
+        Prioritises sentences with explanatory verbs (is, involves, refers, etc.)
+        and penalises questions and very short fragments.
+        """
+        sentences = sent_tokenize(context)
+
+        # Filter: must start with a letter, not be a question, be long enough
+        candidates = [
+            s for s in sentences
+            if len(s.split()) >= 7
+            and not s.strip().endswith('?')
+            and re.match(r'^[a-zA-Z]', s.strip())
+        ]
+        if not candidates:
+            candidates = [s for s in sentences if len(s.split()) >= 5]
+        if not candidates:
+            return ""
+
+        def _score(s: str) -> int:
+            sl = s.lower()
+            score = len(s.split())
+            for w in ['is', 'are', 'refers', 'means', 'involves', 'defined',
+                      'enables', 'allows', 'requires', 'results', 'leads',
+                      'causes', 'helps', 'supports', 'focuses', 'provides',
+                      'consists', 'includes', 'represents']:
+                if f' {w} ' in sl:
+                    score += 3
+            if s.strip().endswith('?'):
+                score -= 20
+            return score
+
+        # Prefer sentences that contain at least one predicate verb
+        # so slide-title fragments like 'Defining the Environment...' are deprioritised
+        _pred_verbs = {
+            'is', 'are', 'was', 'were', 'refers', 'means', 'involves', 'defined',
+            'enables', 'allows', 'requires', 'results', 'leads', 'causes', 'helps',
+            'supports', 'focuses', 'provides', 'consists', 'includes', 'represents',
+        }
+        with_verbs = [
+            c for c in candidates
+            if any(f' {v} ' in c.lower() for v in _pred_verbs)
+        ]
+        pool = with_verbs if with_verbs else candidates
+        best = max(pool, key=_score)
+        return self._clean(best, max_words)
+
+    def _cross_concept_distractors(
+        self, correct: str, all_concepts: List[Dict], exclude: str
+    ) -> List[str]:
+        """
+        Build distractors by extracting the best sentence from OTHER concepts'
+        document contexts. These are in the same topic space as the question
+        but describe a different concept — so they are plausible but wrong.
+        """
+        distractors: List[str] = []
+        others = [
+            c for c in all_concepts
+            if c.get('concept', '').lower() != exclude.lower()
+            and c.get('context', '').strip()
+        ]
+        random.shuffle(others)
+
+        for other in others[:15]:
+            sentence = self._best_sentence(other['context'])
+            if (
+                sentence
+                and sentence.lower() != correct.lower()
+                and sentence not in distractors
+                and len(sentence.split()) >= 6
+            ):
+                distractors.append(sentence)
+            if len(distractors) >= 3:
+                break
+
+        return distractors
+
+    def _definition_distractors(
+        self, concept: str, correct_def: str, all_concepts: List[Dict]
+    ) -> List[str]:
+        """
+        Build definition distractors.
+        Primary path: use definitions stored in other concepts (same document).
+        Secondary path: derive a sentence from other concepts' contexts.
+        Fallback: pattern-based templates (last resort only).
+        """
+        distractors: List[str] = []
+
+        # Primary — use other concepts' stored definitions
+        others_with_defs = [
+            c for c in all_concepts
+            if c.get('concept', '').lower() != concept.lower()
+            and c.get('definition', '').strip()
+            and c.get('definition', '').strip().lower() != correct_def.lower()
+        ]
+        random.shuffle(others_with_defs)
+        for other in others_with_defs[:8]:
+            defn = other['definition'].strip()
+            if defn and defn not in distractors:
+                distractors.append(defn)
+            if len(distractors) >= 3:
+                break
+
+        # Secondary — derive from other concepts' context sentences
+        if len(distractors) < 3:
+            others_ctx = [
+                c for c in all_concepts
+                if c.get('concept', '').lower() != concept.lower()
+                and not c.get('definition', '').strip()
+                and c.get('context', '').strip()
+            ]
+            random.shuffle(others_ctx)
+            for other in others_ctx[:8]:
+                sentence = self._best_sentence(other['context'], max_words=20)
+                if (
+                    sentence
+                    and sentence.lower() != correct_def.lower()
+                    and sentence not in distractors
+                ):
+                    distractors.append(sentence)
+                if len(distractors) >= 3:
+                    break
+
+        # Fallback — pattern templates
+        if len(distractors) < 3:
+            main = concept.split()[0].lower() if concept.split() else concept.lower()
+            templates = [
+                f"A method for measuring {main} outcomes in applied settings",
+                f"The historical development and origin of {main} as a field",
+                f"A specific technique used exclusively in {main} research",
+                f"The complete opposite approach to conventional {main} thinking",
+                f"A narrow subset of {main} focused only on theoretical aspects",
+            ]
+            for t in templates:
+                if len(distractors) >= 3:
+                    break
+                if t not in distractors and t.lower() != correct_def.lower():
+                    distractors.append(t)
+
+        return distractors[:3]
+
+    def _comparison_answer(self, c1: str, c2: str, context: str) -> str:
+        """
+        Derive a comparison answer from the relationship context sentence.
+        Falls back to hardcoded answers for common concept pairs.
+        """
+        if context:
+            sentence = self._best_sentence(context, max_words=28)
+            if sentence and len(sentence.split()) >= 8:
+                return f"{c1} and {c2} differ in that {sentence[0].lower()}{sentence[1:]}"
+
+        return (
+            f"{c1} typically operates at a broader conceptual level "
+            f"while {c2} focuses on more specific or applied aspects"
+        )
+
+    # ── Text cleaning ─────────────────────────────────────────────────────────
+
+    def _clean(self, sentence: str, max_words: int = 25) -> str:
+        """
+        Sanitize a raw sentence for display as an answer option.
+        - Strips leading non-alpha characters (bullets, numbers, symbols)
+        - Removes non-ASCII
+        - Trims to max_words, cutting at a clean word boundary
+        - Rejects structural fragments (Figure, Table, etc.)
+        """
+        sentence = re.sub(r'^[^a-zA-Z]+', '', sentence)
+        # Also strip single-letter list markers: 'd. ', 'a) ', '1. ' etc.
+        sentence = re.sub(r'^[a-zA-Z][\.\):]\s+', '', sentence)
+        sentence = re.sub(r'^\d+[\.\):]\s+', '', sentence)
+        sentence = re.sub(r'[^\x00-\x7F]+', ' ', sentence)
+        sentence = re.sub(r'[>*~|_=+]{1,3}\s*', '', sentence)
+        sentence = sentence.strip().rstrip('.,;:')
+
+        words = sentence.split()
+        if len(words) > max_words:
+            words = words[:max_words]
+            trailing = {
+                'a', 'an', 'the', 'of', 'in', 'on', 'at', 'to', 'for',
+                'with', 'by', 'and', 'or', 'but', 'as', 'if', 'is',
+            }
+            while words and words[-1].lower() in trailing:
+                words.pop()
+            sentence = ' '.join(words)
+
+        if len(sentence.split()) < 5:
+            return ""
+        if sentence.split()[0].lower() in {
+            'figure', 'table', 'exhibit', 'chapter', 'section', 'page', 'note', 'see',
+            'prepared', 'source', 'copyright', 'slide',
+        }:
+            return ""
+
+        return sentence
+
+    # ── Keyword extraction ─────────────────────────────────────────────────────
+
+    def _keywords(self, text: str) -> List[str]:
+        stop = {
+            'the', 'and', 'for', 'with', 'that', 'this', 'from', 'have',
+            'which', 'their', 'about', 'would', 'could', 'been', 'into',
+        }
+        try:
+            words = [w.lower() for w in word_tokenize(text) if w.isalnum() and len(w) > 2]
+        except Exception:
+            words = [w.lower() for w in text.split() if len(w) > 2]
+        return list(dict.fromkeys(w for w in words if w not in stop))[:3]

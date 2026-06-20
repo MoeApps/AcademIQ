@@ -5,341 +5,385 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 
+
 class ConceptExtractor:
-    """Extract meaningful concepts and definitions from text"""
-    
+    """Extract key concepts and definitions from text across any domain."""
+
     def __init__(self):
         try:
             self.stop_words = set(stopwords.words('english'))
-        except:
-            self.stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 
-                              'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been'}
+        except Exception:
+            self.stop_words = {
+                'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to',
+                'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been'
+            }
         self.lemmatizer = WordNetLemmatizer()
-        
-        # Common pronouns to exclude
-        self.pronouns = {
-            'it', 'he', 'she', 'they', 'we', 'you', 'i', 'me', 'him', 'her', 'them', 'us',
-            'this', 'that', 'these', 'those', 'my', 'your', 'his', 'her', 'its', 'our', 'their'
-        }
-        
-        # Common invalid starters for concepts
+
+        # ── Words that must never start a concept ────────────────────────────
         self.invalid_starters = {
+            # Question words
             'tell', 'what', 'how', 'why', 'when', 'where', 'which', 'who',
+            # Instruction verbs
             'explain', 'describe', 'define', 'discuss', 'analyze', 'evaluate',
-            'figure', 'table', 'chapter', 'section', 'page', 'example'
+            'compare', 'contrast', 'identify', 'list', 'outline', 'summarize',
+            # Document-structure words
+            'figure', 'table', 'chapter', 'section', 'page', 'example',
+            'exhibit', 'appendix', 'note', 'step',
+            # Sentence connectors / fragments
+            'if', 'as', 'it', 'its', 'this', 'that', 'these', 'those',
+            'when', 'while', 'since', 'because', 'although', 'however',
+            'therefore', 'thus', 'hence', 'moreover', 'furthermore',
+            'according', 'based', 'given', 'such', 'both', 'each',
+            'all', 'any', 'some', 'most', 'many', 'few', 'other', 'another',
+            # Common non-concept verbs
+            'include', 'includes', 'including', 'involves', 'involving',
+            'refer', 'refers', 'provide', 'provides', 'show', 'shows',
+            'follow', 'follows', 'suggest', 'suggests', 'indicate', 'indicates',
+            # Additional verbs that appear as sentence-starts, not concept-starts
+            'require', 'requires', 'enable', 'enables', 'allow', 'allows',
+            'help', 'helps', 'make', 'makes', 'take', 'takes', 'use', 'uses',
+            'seem', 'seems', 'appear', 'appears', 'become', 'becomes',
+            'remain', 'remains', 'mean', 'means', 'state', 'states',
+            'say', 'says', 'note', 'notes', 'highlight', 'highlights',
         }
-        
-        # Common management/business concepts (seed list)
-        self.common_management_concepts = {
-            'strategic management', 'operational management', 'leadership', 'management',
-            'decision making', 'change management', 'risk management', 'project management',
-            'human resources', 'organizational behavior', 'business ethics', 'corporate governance',
-            'financial management', 'marketing strategy', 'supply chain', 'quality control',
-            'performance management', 'team building', 'conflict resolution', 'stakeholder management',
-            'innovation management', 'knowledge management', 'talent management', 'crisis management'
+
+        # ── Pronouns to reject entirely ───────────────────────────────────────
+        self.pronouns = {
+            'it', 'he', 'she', 'they', 'we', 'you', 'i', 'me', 'him', 'her',
+            'them', 'us', 'this', 'that', 'these', 'those', 'my', 'your',
+            'his', 'its', 'our', 'their',
         }
-    
+
+        # ── Words that mark a phrase as a sentence fragment ──────────────────
+        self.fragment_enders = {
+            'a', 'an', 'the', 'of', 'in', 'on', 'at', 'to', 'for',
+            'with', 'by', 'and', 'or', 'but', 'as', 'if', 'is', 'are',
+            'was', 'were', 'be', 'been', 'being',
+            # Adverbs and pronouns that mark a phrase as a dangling fragment
+            'there', 'here', 'now', 'then', 'when', 'where', 'how', 'why',
+            'its', 'their', 'our', 'your', 'his', 'her', 'them', 'us',
+            'that', 'which', 'what',
+        }
+
+        # ── Seed list of domain-specific concepts (always included if found in text) ─
+        # Empty by default — the extractor discovers concepts from the document itself.
+        # Populate this at runtime for specific domains if desired.
+        self.domain_concepts: set = set()
+
+        # ── Regex: person-name patterns to reject ────────────────────────────
+        # e.g. "Dr Zeinab Khayal", "Mohamed Zein", "Henri Fayol"
+        self._name_pattern = re.compile(
+            r'^(?:Dr\.?\s+|Mr\.?\s+|Ms\.?\s+|Prof\.?\s+)?'
+            r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$'
+        )
+
+        # ── Product / brand name blocklist ────────────────────────────────────
+        self._product_blocklist = {
+            'lenovo yoga', 'microsoft surface book', 'apple macbook pro',
+            'dell xps', 'lenovo thinkpad', 'acer aspire', 'razer blade',
+            'acer aspire e', 'razer blade stealth',
+            'iphone', 'android', 'windows', 'macos',
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Public API
+    # ─────────────────────────────────────────────────────────────────────────
+
     def clean_text(self, text: str) -> str:
-        """Clean text for better processing"""
-        # Remove page numbers, headers, footers
         text = re.sub(r'\bPage\s+\d+\b', '', text)
         text = re.sub(r'\b\d+\s*/\s*\d+\b', '', text)
-        text = re.sub(r'^\d+\.?\s*', '', text, flags=re.MULTILINE)  # Remove numbered lists
-        text = re.sub(r'^[A-Z][A-Z\s]+$', '', text, flags=re.MULTILINE)  # Remove all caps lines
-        
-        # Remove references and citations
+        text = re.sub(r'^\d+\.?\s*', '', text, flags=re.MULTILINE)
+        text = re.sub(r'^[A-Z][A-Z\s]+$', '', text, flags=re.MULTILINE)
         text = re.sub(r'\[.*?\]', '', text)
         text = re.sub(r'\(.*?\)', '', text)
-        
-        # Remove common prefixes that aren't concepts
-        text = re.sub(r'\b(?:For example|For instance|Specifically|In particular|That is|i\.e\.|e\.g\.)\b[^.!?]*[.!?]', '', text, flags=re.IGNORECASE)
-        
+        text = re.sub(
+            r'\b(?:For example|For instance|Specifically|In particular|'
+            r'That is|i\.e\.|e\.g\.)\b[^.!?]*[.!?]',
+            '', text, flags=re.IGNORECASE
+        )
+        # Strip slide-attribution lines: 'Prepared by ...', 'Source:', '©', etc.
+        text = re.sub(
+            r'^(?:Prepared\s+by|Source\s*:|Copyright|\u00a9|Slide\s+\d+)[^\n]*',
+            '', text, flags=re.MULTILINE | re.IGNORECASE
+        )
         return text
-    
+
     def extract_real_concepts(self, text: str) -> List[Dict]:
-        """Extract meaningful concepts with their context"""
-        concepts = []
-        
-        # Clean the text
+        """Extract key concepts with their context from any domain."""
+        concepts: Dict[str, Dict] = {}
         text = self.clean_text(text)
         sentences = sent_tokenize(text)
-        
-        # First pass: Look for explicit definitions
+
+        # ── Pass 1: explicit "X is Y" / "X refers to Y" definitions ──────────
         for sentence in sentences:
-            # Skip very short sentences
             if len(sentence.split()) < 6:
                 continue
-            
-            # Pattern 1: "X is Y" pattern
-            is_pattern = r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:is|are|was|were)\s+([^,.]+?)(?:\.|,)'
-            matches = re.findall(is_pattern, sentence)
-            for concept, definition in matches:
-                if self._is_valid_concept(concept):
-                    concepts.append({
-                        'concept': concept,
-                        'type': 'definition',
-                        'context': sentence,
-                        'definition': definition.strip(),
-                        'score': 10  # High score for explicit definitions
-                    })
-            
-            # Pattern 2: "X refers to Y" pattern
-            refers_pattern = r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:refers to|means|defined as)\s+([^,.]+?)(?:\.|,)'
-            matches = re.findall(refers_pattern, sentence, re.IGNORECASE)
-            for concept, definition in matches:
-                if self._is_valid_concept(concept):
-                    concepts.append({
-                        'concept': concept,
-                        'type': 'definition',
-                        'context': sentence,
-                        'definition': definition.strip(),
-                        'score': 10
-                    })
-        
-        # Second pass: Look for capitalized terms that appear multiple times
-        all_capital_terms = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b', text)
-        term_freq = {}
-        for term in all_capital_terms:
+            for pattern in [
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+(?:is|are|was|were)\s+([^,.]{10,}?)(?:\.|,)',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+(?:refers to|means|defined as)\s+([^,.]{10,}?)(?:\.|,)',
+            ]:
+                for concept, definition in re.findall(pattern, sentence):
+                    concept = concept.strip()
+                    if self._is_valid_concept(concept):
+                        key = concept.lower()
+                        if key not in concepts or concepts[key]['score'] < 10:
+                            concepts[key] = {
+                                'concept': concept,
+                                'type': 'definition',
+                                'context': sentence,
+                                'definition': definition.strip(),
+                                'score': 10,
+                            }
+
+        # ── Pass 2: capitalized multi-word terms appearing ≥ 2 times ─────────
+        all_terms = re.findall(
+            r'\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){1,3})\b', text
+        )
+        freq: Dict[str, int] = {}
+        for term in all_terms:
             if self._is_valid_concept(term):
-                term_freq[term] = term_freq.get(term, 0) + 1
-        
-        # Add frequent terms as concepts
-        for term, freq in term_freq.items():
-            if freq >= 2:  # Appears at least twice
-                # Find a sentence containing this term
-                context_sentence = ""
-                for sentence in sentences:
-                    if term in sentence and len(sentence.split()) > 5:
-                        context_sentence = sentence
-                        break
-                
-                if context_sentence:
-                    concepts.append({
-                        'concept': term,
-                        'type': 'term',
-                        'context': context_sentence,
-                        'definition': '',
-                        'score': min(8, freq * 2)  # Score based on frequency
-                    })
-        
-        # Third pass: Look for common management concepts in text
-        for common_concept in self.common_management_concepts:
-            if common_concept in text.lower():
-                # Find a sentence containing this concept
-                context_sentence = ""
-                for sentence in sentences:
-                    if common_concept in sentence.lower() and len(sentence.split()) > 5:
-                        context_sentence = sentence
-                        break
-                
-                if context_sentence:
-                    # Capitalize the concept
-                    concept_title = ' '.join([word.capitalize() for word in common_concept.split()])
-                    concepts.append({
-                        'concept': concept_title,
-                        'type': 'common',
-                        'context': context_sentence,
-                        'definition': '',
-                        'score': 7
-                    })
-        
-        # Remove duplicates (keep highest score)
-        unique_concepts = {}
-        for concept_data in concepts:
-            concept = concept_data['concept']
-            if concept not in unique_concepts or concept_data['score'] > unique_concepts[concept]['score']:
-                unique_concepts[concept] = concept_data
-        
-        # Sort by score and return top concepts
-        sorted_concepts = sorted(unique_concepts.values(), key=lambda x: x['score'], reverse=True)
-        return sorted_concepts[:25]  # Return top 25 concepts
-    
-    def _is_valid_concept(self, term: str) -> bool:
-        """Check if a term is a valid concept"""
-        term_lower = term.lower()
-        
-        # 1. Check for pronouns
-        if term_lower in self.pronouns:
-            return False
-        
-        # 2. Check for invalid starters
-        first_word = term_lower.split()[0] if term_lower.split() else ""
-        if first_word in self.invalid_starters:
-            return False
-        
-        # 3. Check word count
-        words = term.split()
-        if len(words) < 1 or len(words) > 5:
-            return False
-        
-        # 4. Check for common invalid patterns
-        invalid_patterns = [
-            r'^[A-Z]\s*$',  # Single capital letter
-            r'^Figure\s+\d+',  # Figure references
-            r'^Table\s+\d+',  # Table references
-            r'^Chapter\s+\d+',  # Chapter references
-            r'^Section\s+\d+',  # Section references
-            r'^\d+\s*\.',  # Numbered items
-            r'^[A-Z][a-z]+\s+and\s+[A-Z][a-z]+$',  # Just "X and Y" without context
-            r'^.*\?$',  # Ends with question mark
-        ]
-        
-        for pattern in invalid_patterns:
-            if re.match(pattern, term):
-                return False
-        
-        # 5. Check if it's a fragment (ends with preposition/article)
-        if term_lower.endswith((' a', ' an', ' the', ' of', ' in', ' on', ' at', ' to', ' for', ' with', ' by')):
-            return False
-        
-        # 6. Check if all words are too short (likely not a concept)
-        if all(len(word) <= 2 for word in words):
-            return False
-        
-        return True
-    
+                freq[term] = freq.get(term, 0) + 1
+
+        for term, count in freq.items():
+            if count >= 2:
+                context = next(
+                    (s for s in sentences if term in s and len(s.split()) > 5),
+                    None
+                )
+                if context:
+                    key = term.lower()
+                    score = min(8, count * 2)
+                    if key not in concepts or concepts[key]['score'] < score:
+                        concepts[key] = {
+                            'concept': term,
+                            'type': 'term',
+                            'context': context,
+                            'definition': '',
+                            'score': score,
+                        }
+
+        # ── Pass 3: seed any domain_concepts found in text ──────────────────────
+        # domain_concepts is empty by default; populate it externally for specific domains.
+        text_lower = text.lower()
+        for known in self.domain_concepts:
+            if known in text_lower:
+                context = next(
+                    (s for s in sentences
+                     if known in s.lower() and len(s.split()) > 5),
+                    None
+                )
+                if context:
+                    title = ' '.join(w.capitalize() for w in known.split())
+                    key = known
+                    if key not in concepts:
+                        concepts[key] = {
+                            'concept': title,
+                            'type': 'known',
+                            'context': context,
+                            'definition': '',
+                            'score': 7,
+                        }
+
+        # Sort by score, deduplicate substrings, return top 20
+        sorted_concepts = sorted(concepts.values(), key=lambda x: x['score'], reverse=True)
+        return self._deduplicate(sorted_concepts)[:20]
+
     def extract_definitions(self, text: str) -> List[Dict]:
-        """Extract concept definitions from text"""
+        """Extract concept definitions from text."""
         definitions = []
         sentences = sent_tokenize(text)
-        
+
+        patterns = [
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+(?:is|are)\s+([^,.!?]{10,80})(?:\.|,|!|\?)', 'is'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+(?:refers to|means)\s+([^,.!?]{10,80})(?:\.|,|!|\?)', 'refers'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+(?:can be defined as|is defined as)\s+([^,.!?]{10,80})(?:\.|,)', 'defined'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+involves\s+([^,.!?]{10,80})(?:\.|,)', 'involves'),
+            (r'\b([A-Z][a-z]{1,20}(?:\s+[A-Za-z]{2,20}){1,4})\s+consists of\s+([^,.!?]{10,80})(?:\.|,)', 'consists'),
+        ]
+
+        seen = set()
         for sentence in sentences:
-            # Clean sentence
-            sentence_clean = re.sub(r'\[.*?\]|\(.*?\)', '', sentence)
-            
-            # Definition patterns
-            patterns = [
-                (r'\b([A-Z][a-zA-Z\s]{3,})\s+(?:is|are)\s+([^,.!?]+?)(?:\.|,|!|\?|which|that|who)', 'is'),
-                (r'\b([A-Z][a-zA-Z\s]{3,})\s+(?:refers to|means)\s+([^,.!?]+?)(?:\.|,|!|\?|which|that)', 'refers'),
-                (r'\b([A-Z][a-zA-Z\s]{3,})\s+(?:can be defined as|is defined as)\s+([^,.!?]+?)(?:\.|,|!|\?|which|that)', 'defined'),
-                (r'\b([A-Z][a-zA-Z\s]{3,})\s+involves\s+([^,.!?]+?)(?:\.|,|!|\?|which|that)', 'involves'),
-                (r'\b([A-Z][a-zA-Z\s]{3,})\s+consists of\s+([^,.!?]+?)(?:\.|,|!|\?|which|that)', 'consists'),
-            ]
-            
+            clean = re.sub(r'\[.*?\]|\(.*?\)', '', sentence)
             for pattern, def_type in patterns:
-                matches = re.findall(pattern, sentence_clean, re.IGNORECASE)
-                for match in matches:
-                    if len(match) == 2:
-                        concept, definition = match
-                        concept = concept.strip()
-                        definition = definition.strip()
-                        
-                        # Validate concept
-                        if (self._is_valid_concept(concept) and 
-                            len(definition.split()) > 2 and 
-                            len(definition.split()) < 30):
-                            
-                            # Clean up definition
-                            if definition.endswith(('.', ',', ';', ':')):
-                                definition = definition[:-1]
-                            
-                            definitions.append({
-                                'concept': concept,
-                                'definition': definition,
-                                'type': def_type,
-                                'sentence': sentence_clean,
-                                'quality_score': self._rate_definition_quality(definition)
-                            })
-        
-        # Sort by quality score
+                for concept, definition in re.findall(pattern, clean):
+                    concept = concept.strip()
+                    definition = definition.strip().rstrip('.,;:')
+                    if (
+                        self._is_valid_concept(concept)
+                        and 5 <= len(definition.split()) <= 30
+                        and concept.lower() not in seen
+                    ):
+                        seen.add(concept.lower())
+                        definitions.append({
+                            'concept': concept,
+                            'definition': definition,
+                            'type': def_type,
+                            'sentence': clean,
+                            'quality_score': self._rate_definition_quality(definition),
+                        })
+
         definitions.sort(key=lambda x: x['quality_score'], reverse=True)
-        return definitions[:20]  # Return top 20 definitions
-    
-    def _rate_definition_quality(self, definition: str) -> int:
-        """Rate the quality of a definition"""
-        score = 0
-        
-        # Length-based scoring
-        word_count = len(definition.split())
-        if 5 <= word_count <= 20:
-            score += 3
-        elif word_count > 20:
-            score += 1
-        
-        # Check for keywords indicating good definition
-        good_keywords = ['process', 'method', 'approach', 'technique', 'system', 
-                        'framework', 'model', 'theory', 'concept', 'principle']
-        
-        for keyword in good_keywords:
-            if keyword in definition.lower():
-                score += 2
-        
-        # Check for vague words (penalize)
-        vague_words = ['thing', 'stuff', 'something', 'anything', 'everything']
-        for word in vague_words:
-            if word in definition.lower():
-                score -= 2
-        
-        return max(1, score)
-    
+        return definitions[:20]
+
     def extract_relationships(self, text: str, concepts: List[Dict]) -> List[Dict]:
-        """Extract relationships between concepts"""
+        """Extract comparison / association relationships between concepts."""
         relationships = []
-        
         if len(concepts) < 2:
             return relationships
-        
-        # Get concept names
+
         concept_names = [c['concept'] for c in concepts]
-        
-        # Find sentences with multiple concepts
         sentences = sent_tokenize(text)
-        
+        comparison_words = [
+            'versus', 'vs', 'compared to', 'unlike', 'different from',
+            'contrasts with', 'whereas', 'while', 'in contrast to',
+        ]
+
+        unique: Dict[tuple, Dict] = {}
         for sentence in sentences:
-            concepts_in_sentence = []
-            for concept_name in concept_names:
-                if concept_name in sentence:
-                    concepts_in_sentence.append(concept_name)
-            
-            # If we have 2+ concepts in sentence, check for relationships
-            if len(concepts_in_sentence) >= 2:
-                sentence_lower = sentence.lower()
-                
-                # Check for comparison words
-                comparison_words = ['versus', 'vs', 'compared to', 'unlike', 'different from', 
-                                   'contrasts with', 'whereas', 'while', 'in contrast to']
-                
-                for word in comparison_words:
-                    if word in sentence_lower:
-                        # Find pairs of concepts
-                        for i in range(len(concepts_in_sentence) - 1):
-                            for j in range(i + 1, len(concepts_in_sentence)):
-                                relationships.append({
-                                    'concept1': concepts_in_sentence[i],
-                                    'concept2': concepts_in_sentence[j],
+            present = [n for n in concept_names if n in sentence]
+            if len(present) < 2:
+                continue
+            sl = sentence.lower()
+            for word in comparison_words:
+                if word in sl:
+                    for i in range(len(present) - 1):
+                        for j in range(i + 1, len(present)):
+                            key = tuple(sorted([present[i], present[j]]) + ['comparison'])
+                            if key not in unique:
+                                unique[key] = {
+                                    'concept1': present[i],
+                                    'concept2': present[j],
                                     'relationship': 'comparison',
                                     'context': sentence,
-                                    'score': 8
-                                })
-                
-                # Check for association words
-                association_words = ['and', 'or', 'with', 'together with', 'along with', 'as well as']
-                for word in association_words:
-                    if word in sentence_lower and 'and so on' not in sentence_lower:
-                        # Only add if concepts are mentioned near each other
-                        for i in range(len(concepts_in_sentence) - 1):
-                            for j in range(i + 1, len(concepts_in_sentence)):
-                                # Check if concepts are within 10 words of each other
-                                words = sentence.split()
-                                try:
-                                    idx1 = words.index(concepts_in_sentence[i].split()[0])
-                                    idx2 = words.index(concepts_in_sentence[j].split()[0])
-                                    if abs(idx1 - idx2) <= 10:
-                                        relationships.append({
-                                            'concept1': concepts_in_sentence[i],
-                                            'concept2': concepts_in_sentence[j],
-                                            'relationship': 'association',
-                                            'context': sentence,
-                                            'score': 5
-                                        })
-                                except:
-                                    pass
-        
-        # Remove duplicates
-        unique_relationships = {}
-        for rel in relationships:
-            key = tuple(sorted([rel['concept1'], rel['concept2']]) + [rel['relationship']])
-            if key not in unique_relationships or rel['score'] > unique_relationships[key]['score']:
-                unique_relationships[key] = rel
-        
-        return list(unique_relationships.values())[:15]  # Return top 15 relationships
+                                    'score': 8,
+                                }
+
+        return list(unique.values())[:15]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Private helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _is_valid_concept(self, term: str) -> bool:
+        """Return True only if *term* is a plausible domain concept."""
+        if not term or not term.strip():
+            return False
+
+        term = term.strip()
+        term_lower = term.lower()
+        words = term.split()
+
+        # ── Length guard ──────────────────────────────────────────────────────
+        if len(words) < 2 or len(words) > 5:
+            return False
+
+        # ── Pronoun check ─────────────────────────────────────────────────────
+        if term_lower in self.pronouns:
+            return False
+
+        # ── Invalid starter ───────────────────────────────────────────────────
+        first = words[0].lower()
+        if first in self.invalid_starters:
+            return False
+
+        # ── Fragment ender ────────────────────────────────────────────────────
+        last = words[-1].lower()
+        if last in self.fragment_enders:
+            return False
+
+        # ── Product / brand blocklist ─────────────────────────────────────────
+        if term_lower in self._product_blocklist:
+            return False
+
+        # ── Person-name pattern: reject names like "Mohamed Zein",
+        #    "Dr Zeinab Khayal", "Henri Fayol" etc.
+        #    (allow terms that are in domain_concepts or contain concept-indicator words)
+        if self._name_pattern.match(term) and term_lower not in self.domain_concepts:
+            # Heuristic: if every word is title-case and none appear in a
+            # domain vocabulary, it is likely a person name — reject it.
+            concept_indicator_words = {
+                # General academic / analytical
+                'theory', 'theorem', 'model', 'principle', 'law', 'effect',
+                'method', 'process', 'system', 'framework', 'paradigm',
+                'concept', 'approach', 'analysis', 'synthesis', 'hypothesis',
+                'function', 'structure', 'variable', 'perspective',
+                # Business / management
+                'management', 'decision', 'planning', 'organizing', 'leading',
+                'controlling', 'leadership', 'strategy', 'strategic', 'operational',
+                'culture', 'skills', 'objectives', 'rationality', 'bounded',
+                'intuitive', 'programmed', 'evidence', 'organizational',
+                'behavior', 'ethics', 'governance', 'innovation', 'performance',
+                'stakeholder', 'efficiency', 'effectiveness', 'conceptual',
+                # Science / technology
+                'force', 'energy', 'matter', 'reaction', 'evolution', 'quantum',
+                'relativity', 'entropy', 'frequency', 'wavelength', 'algorithm',
+                'network', 'protocol', 'computing', 'machine', 'neural',
+                'potential', 'kinetic', 'atomic', 'molecular', 'chemical',
+                'biological', 'genetic', 'cellular', 'neural', 'cognitive',
+                # History / social sciences
+                'revolution', 'movement', 'doctrine', 'policy', 'ideology',
+                'democracy', 'colonial', 'industrial', 'economic', 'political',
+                'social', 'cultural', 'national', 'international', 'global',
+                # Mathematics
+                'equation', 'derivative', 'integral', 'matrix', 'vector',
+                'probability', 'statistics', 'regression', 'distribution',
+            }
+            if not any(w.lower() in concept_indicator_words for w in words):
+                return False
+
+        # ── Reject common document-structure patterns ─────────────────────────
+        bad_patterns = [
+            r'^[A-Z]\s*$',
+            r'^Figure\s+\d+',
+            r'^Table\s+\d+',
+            r'^Chapter\s+\d+',
+            r'^Section\s+\d+',
+            r'^\d+\s*\.',
+            r'^.*\?$',
+            r'^[A-Z][a-z]+\s+and\s+[A-Z][a-z]+$',
+        ]
+        for p in bad_patterns:
+            if re.match(p, term):
+                return False
+
+        # ── All words too short ───────────────────────────────────────────────
+        if all(len(w) <= 2 for w in words):
+            return False
+
+        return True
+
+    def _rate_definition_quality(self, definition: str) -> int:
+        score = 0
+        wc = len(definition.split())
+        if 5 <= wc <= 20:
+            score += 3
+        elif wc > 20:
+            score += 1
+        good = [
+            'process', 'method', 'approach', 'technique', 'system',
+            'framework', 'model', 'theory', 'concept', 'principle',
+            'ability', 'skill', 'function', 'role', 'strategy',
+        ]
+        for kw in good:
+            if kw in definition.lower():
+                score += 2
+        vague = ['thing', 'stuff', 'something', 'anything', 'everything']
+        for v in vague:
+            if v in definition.lower():
+                score -= 2
+        return max(1, score)
+
+    def _deduplicate(self, concepts: List[Dict]) -> List[Dict]:
+        """Remove concepts whose name is a substring of a higher-scored one."""
+        result = []
+        seen_keys = [c['concept'].lower() for c in concepts]
+        for i, concept in enumerate(concepts):
+            key = concept['concept'].lower()
+            is_sub = any(
+                key != seen_keys[j] and key in seen_keys[j]
+                for j in range(len(seen_keys))
+                if j != i
+            )
+            if not is_sub:
+                result.append(concept)
+        return result

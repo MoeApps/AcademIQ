@@ -114,30 +114,23 @@ def _predict(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         from app.services.performance_predict import predict_performance
         raw = {k: features.get(k, 0) for k in _PERF_FEATURES}
         return predict_performance(raw)
-    except Exception:
+    except ImportError:
+        return None
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Performance model prediction failed: %s", exc)
         return None
 
 
 def _predict_grade(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Run the real grade/risk model (TensorFlow) if available; else None.
+    """Grade + risk cluster from the clustering/grade model, or None if offline.
 
-    Scores are stored 0-1 by the feature pipeline; the grade model trained on
-    0-100, so we rescale the score inputs.
+    Scale handling lives in risk_grade_service (live scores are 0-1, model
+    trained on 0-100).
     """
     try:
-        from app.services.grade_risk_predict import predict_grade_and_risk
-        req = {
-            "all_clicks": features.get("all_clicks", 0),
-            "active_days": features.get("active_days", 0),
-            "access_frequency": features.get("access_frequency", 0.0),
-            "material_clicks": features.get("material_clicks", 0),
-            "avg_quiz_score": (features.get("avg_quiz_score", 0) or 0) * 100,
-            "quiz_attempts": features.get("quiz_attempts", 0),
-            "avg_assignment_score": (features.get("avg_assignment_score", 0) or 0) * 100,
-            "assignment_submissions": features.get("assignment_submissions", 0),
-            "total_time_spent": features.get("total_time_spent", 0),
-        }
-        return predict_grade_and_risk(req)
+        from app.services import risk_grade_service
+        return risk_grade_service.predict(features)
     except Exception:
         return None
 
@@ -211,8 +204,9 @@ def get_performance(user_id: str, course_id: str) -> Dict[str, Any]:
     # ── Run global behavioural models ──────────────────────────────────────
     feats      = _latest_features(user_id)
     perf       = _predict(feats)        # LightGBM classifier → probability
-    grade_pred = _predict_grade(feats)  # TF grade model → predicted_grade
+    grade_pred = _predict_grade(feats)  # grade regressor + risk cluster
     used_model = bool(perf or grade_pred)
+    risk_level = grade_pred.get("risk_level") if grade_pred else None
 
     # ── Predicted grade ────────────────────────────────────────────────────
     # Priority: (1) TF grade model, (2) real course average, (3) not shown.
@@ -248,6 +242,7 @@ def get_performance(user_id: str, course_id: str) -> Dict[str, Any]:
         "predictedGrade": predicted,          # None when no data — frontend handles this
         "status":         status,
         "statusScope":    status_scope,
+        "riskLevel":      risk_level,         # Low/Medium/High Risk from the cluster model
         "courseAverage":  course_avg,
         "statistics": {
             "quizzes": {

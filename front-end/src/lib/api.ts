@@ -27,6 +27,7 @@ import type {
   CounterfactualResponse,
   PredictionHistoryPoint,
   PredictionTrendResponse,
+  StudyBuddyResponse,
 } from "./types";
 
 /**
@@ -115,6 +116,36 @@ export const api = {
   },
 
   /**
+   * Authenticate via a Moodle instance. The backend contacts Moodle's Web
+   * Services API, finds or creates the AcademIQ account, and issues a session.
+   */
+  async moodleLogin(
+    moodleUrl: string,
+    username: string,
+    password: string,
+  ): Promise<AuthResult & { account_created?: boolean }> {
+    if (USE_MOCK) {
+      const user = getMockAuthUser("admin@academiq.local");
+      return delay({ user, role: user.role, token: "mock-session-token", account_created: false });
+    }
+    return request<AuthResult & { account_created?: boolean }>("/api/auth/moodle", {
+      method: "POST",
+      body: JSON.stringify({ moodle_url: moodleUrl, username, password }),
+    });
+  },
+
+  /** Fetch the configured default Moodle URL from the backend. */
+  async getMoodleDefaultUrl(): Promise<string | null> {
+    if (USE_MOCK) return delay(null);
+    try {
+      const data = await request<{ moodle_url: string | null }>("/api/auth/moodle/default-url");
+      return data.moodle_url;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
    * Consume a magic-link token and create a real session.
    * Called by the /magic-login page on mount.
    */
@@ -174,7 +205,7 @@ export const api = {
     await request<void>(`/api/admin/users/${id}`, { method: "DELETE" });
   },
 
-  async resetPassword(
+  async adminResetPassword(
     id: string,
     password?: string,
   ): Promise<{ generatedPassword?: string }> {
@@ -321,6 +352,34 @@ export const api = {
       });
     }
     return request<PredictionTrendResponse>("/prediction-trend");
+  },
+
+  /* ---------------------------------------------------------------------- */
+  /* Study Buddies                                                          */
+  /* ---------------------------------------------------------------------- */
+
+  async getStudyBuddies(courseId: string): Promise<StudyBuddyResponse> {
+    if (USE_MOCK) {
+      return delay<StudyBuddyResponse>({
+        available: true,
+        buddies: [
+          { studentId: "s1", fullName: "Layla Ahmed", why: "Similar study style, a bit ahead" },
+          { studentId: "s2", fullName: "Omar Khalil", why: "Same pace, complementary strengths" },
+          { studentId: "s3", fullName: "Sara Mansour", why: "Similar quiz performance" },
+        ],
+      });
+    }
+    return request<StudyBuddyResponse>(`/courses/${courseId}/study-buddies`);
+  },
+
+  async setStudyBuddyOptIn(optin: boolean): Promise<{ studyBuddyOptIn: boolean }> {
+    if (USE_MOCK) {
+      return delay({ studyBuddyOptIn: optin });
+    }
+    return request<{ studyBuddyOptIn: boolean }>("/me/study-buddy-optin", {
+      method: "PUT",
+      body: JSON.stringify({ optin }),
+    });
   },
 };
 

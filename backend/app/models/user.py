@@ -42,6 +42,8 @@ def build_user_document(
         "role": role if role in VALID_ROLES else ROLE_STUDENT,
         "moodle_user_id": _clean(moodle_user_id),
         "student_id": _clean(student_id),
+        # Opt-in for the study-buddy recommender (privacy: off by default).
+        "study_buddy_optin": False,
         "created_at": now,
         "updated_at": now,
     }
@@ -66,6 +68,7 @@ def serialize_user(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         "fullName": doc.get("full_name", ""),
         "email": doc.get("email", ""),
         "role": doc.get("role", ROLE_STUDENT),
+        "studyBuddyOptIn": bool(doc.get("study_buddy_optin", False)),
         "createdAt": _iso(doc.get("created_at")),
         "updatedAt": _iso(doc.get("updated_at")),
     }
