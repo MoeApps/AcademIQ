@@ -10,6 +10,7 @@ import {
   LineChart,
   FileQuestion,
   Activity,
+  Users,
   Menu,
   X,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/performance", label: "Performance", icon: LineChart },
   { href: "/quiz", label: "Quiz Generation", icon: FileQuestion },
+  { href: "/study-buddies", label: "Study Buddies", icon: Users },
   { href: "/system-status", label: "System Status", icon: Activity },
 ];
 

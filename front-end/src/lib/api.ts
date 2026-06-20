@@ -27,6 +27,7 @@ import type {
   CounterfactualResponse,
   PredictionHistoryPoint,
   PredictionTrendResponse,
+  StudyBuddyResponse,
 } from "./types";
 
 /**
@@ -351,6 +352,34 @@ export const api = {
       });
     }
     return request<PredictionTrendResponse>("/prediction-trend");
+  },
+
+  /* ---------------------------------------------------------------------- */
+  /* Study Buddies                                                          */
+  /* ---------------------------------------------------------------------- */
+
+  async getStudyBuddies(courseId: string): Promise<StudyBuddyResponse> {
+    if (USE_MOCK) {
+      return delay<StudyBuddyResponse>({
+        available: true,
+        buddies: [
+          { studentId: "s1", fullName: "Layla Ahmed", why: "Similar study style, a bit ahead" },
+          { studentId: "s2", fullName: "Omar Khalil", why: "Same pace, complementary strengths" },
+          { studentId: "s3", fullName: "Sara Mansour", why: "Similar quiz performance" },
+        ],
+      });
+    }
+    return request<StudyBuddyResponse>(`/courses/${courseId}/study-buddies`);
+  },
+
+  async setStudyBuddyOptIn(optin: boolean): Promise<{ studyBuddyOptIn: boolean }> {
+    if (USE_MOCK) {
+      return delay({ studyBuddyOptIn: optin });
+    }
+    return request<{ studyBuddyOptIn: boolean }>("/me/study-buddy-optin", {
+      method: "PUT",
+      body: JSON.stringify({ optin }),
+    });
   },
 };
 

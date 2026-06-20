@@ -30,6 +30,8 @@ export interface AuthUser {
   /** Moodle linkage identifiers (primary mapping keys; may be absent). */
   moodleUserId?: string | null;
   studentId?: string | null;
+  /** Whether the student has opted in to study-buddy discovery. */
+  studyBuddyOptIn?: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -198,6 +200,20 @@ export interface GeneratedQuiz {
   /** Material ids the quiz was generated from. */
   materialIds: string[];
   questions: QuizQuestion[];
+}
+
+// ── Study Buddies ─────────────────────────────────────────────────────────────
+
+export interface StudyBuddy {
+  studentId: string;
+  fullName: string;
+  why: string;
+}
+
+export interface StudyBuddyResponse {
+  available: boolean;
+  buddies: StudyBuddy[];
+  reason?: string;
 }
 
 // ── Evidence Timeline ──────────────────────────────────────────────────────────
