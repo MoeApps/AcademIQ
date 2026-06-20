@@ -34,10 +34,9 @@ BEHAVIORAL_FEATURES = [
     "all_clicks", "active_days", "access_frequency",
     "material_clicks", "quiz_attempts", "assignment_submissions",
     "total_time_spent", "procrastination_index", "late_submission_count",
-    "clicks_per_day", "time_per_click", "time_per_active_day",
+    "clicks_per_day", "time_per_click",
     "engagement_consistency", "behavioral_risk_score",
-    "procrastination_x_late", "submission_rate",
-    "all_clicks_vs_median", "total_time_spent_vs_median", "active_days_vs_median",
+    "all_clicks_relative", "total_time_spent_relative", "active_days_relative",
 ]
 
 # High-performer cohort medians for the 9 raw mutable features — used as the

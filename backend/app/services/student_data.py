@@ -114,7 +114,11 @@ def _predict(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         from app.services.performance_predict import predict_performance
         raw = {k: features.get(k, 0) for k in _PERF_FEATURES}
         return predict_performance(raw)
-    except Exception:
+    except ImportError:
+        return None
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Performance model prediction failed: %s", exc)
         return None
 
 
