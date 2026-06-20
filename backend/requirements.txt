@@ -7,6 +7,7 @@ pydantic[email]>=2
 python-jose[cryptography]
 bcrypt
 python-dotenv
+httpx
 numpy
 
 # --- ML stack (performance model: insights/predictions) ---
